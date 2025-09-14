@@ -5,6 +5,8 @@ import { auth } from "@clerk/nextjs/server";
 import { getPusher } from "@/lib/pusher-server";
 
 export async function GET(req: NextRequest) {
+  const { userId } = auth();
+  if (!userId) return new NextResponse("Unauthorized", { status: 401 });
   await connectDB();
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get("projectId");
@@ -71,4 +73,3 @@ export async function PATCH(req: NextRequest) {
 
   return NextResponse.json({ run });
 }
-

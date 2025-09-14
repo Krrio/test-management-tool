@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
@@ -41,85 +41,24 @@ type Project = {
   modules: Module[]
 }
 
-// Demo data (can be fetched later)
-const demoProjects: Project[] = [
-  {
-    id: "mwo",
-    name: "MWO",
-    modules: [
-      {
-        id: "monetization",
-        name: "Monetization",
-        sections: [
-          {
-            id: "so",
-            name: "SO",
-            steps: [
-              { id: "so-1", title: "Open Store", description: "Open the store from the main menu" },
-              { id: "so-2", title: "Load Offers", description: "Verify offers load with correct prices" },
-              { id: "so-3", title: "Offer Details", description: "Check details modal opens and content is correct" },
-              { id: "so-4", title: "Offer Details Chained", description: "Check details Offer Details Chained" },
-              { id: "so-5", title: "Offer Details Test", description: "Check details Offer Details Test" },
-            ],
-          },
-          {
-            id: "chest-iap", 
-            name: "Chest & IAP",
-            steps: [
-              { id: "ci-1", title: "Open Chest", description: "Open a free chest and observe rewards" },
-              { id: "ci-2", title: "Purchase IAP", description: "Buy a small IAP and verify receipt" },
-            ],
-          },
-          {
-            id: "currencies",
-            name: "Currencies",
-            steps: [
-              { id: "cur-1", title: "Balance UI", description: "Balances are shown and update in real-time" },
-              { id: "cur-2", title: "Spend", description: "Spending reduces currency as expected" },
-              { id: "cur-3", title: "Gain", description: "Gaining increases currency as expected" },
-            ],
-          },
-          {
-            id: "buttons",
-            name: "Buttons",
-            steps: [
-              { id: "btn-1", title: "Disabled State", description: "Buttons show disabled state when unavailable" },
-              { id: "btn-2", title: "Click Action", description: "Primary actions trigger the correct flow" },
-            ],
-          },
-        ],
-      },
-      {
-        id: "onboarding",
-        name: "Onboarding",
-        sections: [
-          {
-            id: "tutorial",
-            name: "Tutorial",
-            steps: [
-              { id: "tut-1", title: "Start Tutorial", description: "Tutorial starts after first launch" },
-              { id: "tut-2", title: "Hints", description: "Hints appear contextually and can be dismissed" },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-]
+// Data now fetched from API
 
 type SectionRunKey = `${string}|${string}|${string}` // projectId|moduleId|sectionId
 
 export default function TestCaseLabPage() {
-  const [projects] = useState<Project[]>(demoProjects)
-  const [projectId, setProjectId] = useState<string>(projects[0]?.id ?? "")
-  const [moduleId, setModuleId] = useState<string>(projects[0]?.modules[0]?.id ?? "")
-  const [sectionId, setSectionId] = useState<string>(projects[0]?.modules[0]?.sections[0]?.id ?? "")
+  const [projects, setProjects] = useState<Project[]>([])
+  const [projectId, setProjectId] = useState<string>("")
+  const [moduleId, setModuleId] = useState<string>("")
+  const [sectionId, setSectionId] = useState<string>("")
+  const [loadingProjects, setLoadingProjects] = useState(true)
+  const [loadingRun, setLoadingRun] = useState(false)
 
   // runs: map from sectionKey -> map of stepId -> { status, comment? }
   const [runs, setRuns] = useState<Record<SectionRunKey, Record<string, StepRun>>>({})
   const [sectionCompleteOpen, setSectionCompleteOpen] = useState(false)
   const [sectionCompleteName, setSectionCompleteName] = useState<string | undefined>(undefined)
   const [stepSort, setStepSort] = useState<"asc" | "desc">("asc")
+  const [viewerCount, setViewerCount] = useState<number>(0)
 
   const project = useMemo(() => projects.find((p) => p.id === projectId), [projects, projectId])
   const module = useMemo(() => project?.modules.find((m) => m.id === moduleId), [project, moduleId])
@@ -143,8 +82,9 @@ export default function TestCaseLabPage() {
     return runs[sKey]?.[stepId]?.comment ?? ""
   }
 
-  const setStepStatus = (sKey: SectionRunKey | undefined, stepId: string, status: StepStatus) => {
-    if (!sKey) return
+  const setStepStatus = async (sKey: SectionRunKey | undefined, stepId: string, status: StepStatus, comment?: string) => {
+    if (!sKey || !project || !module || !section) return
+    // optimistic update
     setRuns((prev) => ({
       ...prev,
       [sKey]: {
@@ -152,23 +92,33 @@ export default function TestCaseLabPage() {
         [stepId]: {
           ...(prev[sKey]?.[stepId] ?? { status: "untested" }),
           status,
+          comment: typeof comment === "string" ? comment : prev[sKey]?.[stepId]?.comment,
         },
       },
     }))
+    // persist
+    try {
+      await fetch(`/api/runs`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: project.id,
+          moduleId: module.id,
+          sectionId: section.id,
+          stepId,
+          status,
+          comment,
+        }),
+      })
+    } catch (e) {
+      // ignore errors in optimistic skeleton, could rollback here
+    }
   }
 
   const setStepComment = (sKey: SectionRunKey | undefined, stepId: string, comment: string) => {
     if (!sKey) return
-    setRuns((prev) => ({
-      ...prev,
-      [sKey]: {
-        ...prev[sKey],
-        [stepId]: {
-          ...(prev[sKey]?.[stepId] ?? { status: "blocked" }),
-          comment,
-        },
-      },
-    }))
+    const currentStatus = getStepStatus(sKey, stepId) || "blocked"
+    setStepStatus(sKey, stepId, currentStatus, comment)
   }
 
   const computeSectionStatus = (sec: Section): StepStatus => {
@@ -243,15 +193,121 @@ export default function TestCaseLabPage() {
         return acc
       }, { ...(prev[key] ?? {}) }),
     }))
+    // persist in background
+    Promise.all(
+      section.steps.map((st) =>
+        fetch(`/api/runs`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId: project.id, moduleId: module.id, sectionId: section.id, stepId: st.id, status: 'passed' }),
+        }).catch(() => undefined)
+      )
+    ).catch(() => undefined)
     if (!beforeAllPassed && section.steps.length > 0) {
       setSectionCompleteName(section.name)
       setSectionCompleteOpen(true)
     }
   }
 
+  // Fetch projects initially
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLoadingProjects(true)
+      try {
+        const res = await fetch('/api/projects')
+        const data = await res.json()
+        if (!cancelled) {
+          const list = (data?.projects ?? []) as Array<any>
+          setProjects(list.map((p) => ({ id: p._id, name: p.name, modules: p.modules?.map((m: any) => ({ id: m._id, name: m.name, sections: m.sections?.map((s: any) => ({ id: s._id, name: s.name, steps: s.steps?.map((st: any) => ({ id: st._id, title: st.title, description: st.description })) || [] })) || [] })) || [] })))
+        }
+      } finally {
+        if (!cancelled) setLoadingProjects(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  // Initialize selection when projects arrive
+  useEffect(() => {
+    if (projects.length && !projectId) {
+      const p = projects[0]
+      const m = p.modules[0]
+      const s = m?.sections[0]
+      setProjectId(p.id)
+      if (m) setModuleId(m.id)
+      if (s) setSectionId(s.id)
+    }
+  }, [projects])
+
+  // Fetch run state for active section
+  useEffect(() => {
+    const loadRun = async () => {
+      if (!project || !module || !section) return
+      setLoadingRun(true)
+      try {
+        const params = new URLSearchParams({ projectId: project.id, moduleId: module.id, sectionId: section.id })
+        const res = await fetch(`/api/runs?${params.toString()}`)
+        const data = await res.json()
+        const key = getSectionKey(project.id, module.id, section.id)
+        const stepsObj = (data?.run?.steps ?? {}) as Record<string, StepRun>
+        setRuns((prev) => ({ ...prev, [key]: stepsObj }))
+      } finally {
+        setLoadingRun(false)
+      }
+    }
+    loadRun()
+  }, [projectId, moduleId, sectionId])
+
+  // Realtime updates via Pusher
+  useEffect(() => {
+    let channel: any
+    let presence: any
+    const subscribe = async () => {
+      if (!project || !module || !section) return
+      const { getPusherClient } = await import('@/lib/pusher-client')
+      const pusher = getPusherClient()
+      const name = `private-section-${project.id}|${module.id}|${section.id}`
+      channel = pusher.subscribe(name)
+      channel.bind('step-updated', (evt: { stepId: string; status: StepStatus; comment?: string }) => {
+        const key = getSectionKey(project.id, module.id, section.id)
+        setRuns((prev) => ({
+          ...prev,
+          [key]: {
+            ...(prev[key] ?? {}),
+            [evt.stepId]: {
+              ...(prev[key]?.[evt.stepId] ?? { status: 'untested' }),
+              status: evt.status,
+              comment: evt.comment ?? prev[key]?.[evt.stepId]?.comment,
+            },
+          },
+        }))
+      })
+
+      // presence channel (viewer count)
+      const presenceName = `presence-section-${project.id}|${module.id}|${section.id}`
+      presence = pusher.subscribe(presenceName)
+      const updateCount = () => {
+        try {
+          const count = (presence?.members?.count as number) ?? 0
+          setViewerCount(count)
+        } catch { setViewerCount(0) }
+      }
+      presence.bind('pusher:subscription_succeeded', updateCount)
+      presence.bind('pusher:member_added', updateCount)
+      presence.bind('pusher:member_removed', updateCount)
+    }
+    subscribe()
+    return () => {
+      try { if (channel) channel.unsubscribe() } catch {}
+      try { if (presence) presence.unsubscribe() } catch {}
+    }
+  }, [projectId, moduleId, sectionId])
+
   return (
     <div className="h-[calc(100vh-4rem)] w-full p-4 flex flex-col overflow-hidden">
-      {/* Top bar: Project selector (left) + Back arrow (right) */}
+      {/* Top bar: Project selector (left) + Back arrow (right) + live viewers */}
       <div className="mb-4 flex items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3">
           <Select value={projectId} onValueChange={handleSelectProject}>
@@ -267,14 +323,29 @@ export default function TestCaseLabPage() {
             </SelectContent>
           </Select>
         </div>
-        <Link href="/" aria-label="Back to home" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="size-4" />
-          <span className="sr-only">Back</span>
-        </Link>
+        <div className="flex items-center gap-4">
+          <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span>{viewerCount || 0} viewing</span>
+          </div>
+          <Link href="/" aria-label="Back to home" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="size-4" />
+            <span className="sr-only">Back</span>
+          </Link>
+        </div>
       </div>
 
       {/* Main layout: modules sidebar + sections and steps */}
       <div className="flex gap-6 flex-1 min-h-0 min-w-0">
+        {loadingProjects && (
+          <div className="text-sm text-muted-foreground">Loading projects…</div>
+        )}
+        {!loadingProjects && !project && (
+          <div className="text-sm text-muted-foreground">No projects</div>
+        )}
         {/* Modules sidebar */}
         <aside className="w-[240px] shrink-0 rounded-lg border h-full flex flex-col">
           <div className="border-b px-4 py-3 text-sm font-medium">Modules</div>
@@ -381,6 +452,9 @@ export default function TestCaseLabPage() {
             )}
             {section && (
               <div className="flex flex-col gap-3 p-3 flex-1 overflow-y-auto">
+                {loadingRun && (
+                  <div className="text-xs text-muted-foreground">Loading…</div>
+                )}
                 {sortedSteps(section).map((step, idx) => {
                   const s = getStepStatus(sectionKey, step.id)
                   const displayNum = stepSort === "asc" ? idx + 1 : section.steps.length - idx
