@@ -15,7 +15,7 @@ type UpdateStepArgs = {
 };
 
 export async function updateStepStatus(args: UpdateStepArgs) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
 
   const { projectId, moduleId, sectionId, stepId, status, comment } = args;
@@ -51,4 +51,3 @@ export async function updateStepStatus(args: UpdateStepArgs) {
 
   return run;
 }
-

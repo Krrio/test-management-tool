@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { getPusher } from "@/lib/pusher-server";
 
 export async function POST(req: NextRequest) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) return new NextResponse("Unauthorized", { status: 401 });
 
   let body: any;
@@ -19,7 +19,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const pusher = getPusher();
+  let pusher: ReturnType<typeof getPusher> | null = null;
+  try {
+    pusher = getPusher();
+  } catch (e) {
+    return NextResponse.json({ error: "Pusher not configured" }, { status: 503 });
+  }
 
   if (channelName.startsWith("presence-")) {
     const presenceData = { user_id: userId, user_info: { id: userId } } as any;
@@ -30,4 +35,3 @@ export async function POST(req: NextRequest) {
   const authResponse = pusher.authorizeChannel(socketId, channelName);
   return NextResponse.json(authResponse);
 }
-

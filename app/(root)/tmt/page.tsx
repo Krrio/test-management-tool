@@ -266,37 +266,42 @@ export default function TestCaseLabPage() {
     let presence: any
     const subscribe = async () => {
       if (!project || !module || !section) return
-      const { getPusherClient } = await import('@/lib/pusher-client')
-      const pusher = getPusherClient()
-      const name = `private-section-${project.id}|${module.id}|${section.id}`
-      channel = pusher.subscribe(name)
-      channel.bind('step-updated', (evt: { stepId: string; status: StepStatus; comment?: string }) => {
-        const key = getSectionKey(project.id, module.id, section.id)
-        setRuns((prev) => ({
-          ...prev,
-          [key]: {
-            ...(prev[key] ?? {}),
-            [evt.stepId]: {
-              ...(prev[key]?.[evt.stepId] ?? { status: 'untested' }),
-              status: evt.status,
-              comment: evt.comment ?? prev[key]?.[evt.stepId]?.comment,
+      try {
+        const { getPusherClient } = await import('@/lib/pusher-client')
+        const pusher = getPusherClient()
+        const name = `private-section-${project.id}|${module.id}|${section.id}`
+        channel = pusher.subscribe(name)
+        channel.bind('step-updated', (evt: { stepId: string; status: StepStatus; comment?: string }) => {
+          const key = getSectionKey(project.id, module.id, section.id)
+          setRuns((prev) => ({
+            ...prev,
+            [key]: {
+              ...(prev[key] ?? {}),
+              [evt.stepId]: {
+                ...(prev[key]?.[evt.stepId] ?? { status: 'untested' }),
+                status: evt.status,
+                comment: evt.comment ?? prev[key]?.[evt.stepId]?.comment,
+              },
             },
-          },
-        }))
-      })
+          }))
+        })
 
-      // presence channel (viewer count)
-      const presenceName = `presence-section-${project.id}|${module.id}|${section.id}`
-      presence = pusher.subscribe(presenceName)
-      const updateCount = () => {
-        try {
-          const count = (presence?.members?.count as number) ?? 0
-          setViewerCount(count)
-        } catch { setViewerCount(0) }
+        // presence channel (viewer count)
+        const presenceName = `presence-section-${project.id}|${module.id}|${section.id}`
+        presence = pusher.subscribe(presenceName)
+        const updateCount = () => {
+          try {
+            const count = (presence?.members?.count as number) ?? 0
+            setViewerCount(count)
+          } catch { setViewerCount(0) }
+        }
+        presence.bind('pusher:subscription_succeeded', updateCount)
+        presence.bind('pusher:member_added', updateCount)
+        presence.bind('pusher:member_removed', updateCount)
+      } catch (e) {
+        // Missing NEXT_PUBLIC_PUSHER_* keys or client not available; skip realtime gracefully
+        setViewerCount(0)
       }
-      presence.bind('pusher:subscription_succeeded', updateCount)
-      presence.bind('pusher:member_added', updateCount)
-      presence.bind('pusher:member_removed', updateCount)
     }
     subscribe()
     return () => {

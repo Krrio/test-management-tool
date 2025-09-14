@@ -63,6 +63,8 @@ export default function RootLayout({
                   </SignUpButton>
                 </SignedOut>
                 <SignedIn>
+                  <Link href="/tmt" className="text-sm text-muted-foreground hover:text-foreground">TMT</Link>
+                  <Link href="/tmt/admin" className="text-sm text-muted-foreground hover:text-foreground">Admin</Link>
                   <UserButton />
                 </SignedIn>
               </div>
