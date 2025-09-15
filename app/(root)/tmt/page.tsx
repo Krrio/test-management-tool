@@ -5,8 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Badge } from "@/components/ui/badge"
-import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import { ChevronDown, ChevronUp, ArrowLeft } from "lucide-react"
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog"
+import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash } from "lucide-react"
 import Link from "next/link"
 
 
@@ -59,6 +59,20 @@ export default function TestCaseLabPage() {
   const [sectionCompleteName, setSectionCompleteName] = useState<string | undefined>(undefined)
   const [stepSort, setStepSort] = useState<"asc" | "desc">("asc")
   const [viewerCount, setViewerCount] = useState<number>(0)
+  const [editingStepId, setEditingStepId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState<string>("")
+  const [editDesc, setEditDesc] = useState<string>("")
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { type: 'module'; id: string; name: string }
+    | { type: 'section'; id: string; name: string }
+    | { type: 'step'; id: string; name: string }
+    | null
+  >(null)
+  const [dupOpen, setDupOpen] = useState(false)
+  const [dupBase, setDupBase] = useState<Module | null>(null)
+  const [dupName, setDupName] = useState("")
 
   const project = useMemo(() => projects.find((p) => p.id === projectId), [projects, projectId])
   const module = useMemo(() => project?.modules.find((m) => m.id === moduleId), [project, moduleId])
@@ -180,6 +194,178 @@ export default function TestCaseLabPage() {
     const arr = [...sec.steps]
     if (stepSort === "desc") arr.reverse()
     return arr
+  }
+
+  // Refresh projects preserving current selection when possible
+  const refreshProjectsPreserve = async () => {
+    try {
+      const res = await fetch('/api/projects')
+      const data = await res.json()
+      const list = ((data?.projects ?? []) as Array<any>).map((p) => ({
+        id: p._id,
+        name: p.name,
+        modules: (p.modules ?? []).map((m: any) => ({
+          id: m._id,
+          name: m.name,
+          sections: (m.sections ?? []).map((s: any) => ({
+            id: s._id,
+            name: s.name,
+            steps: (s.steps ?? []).map((st: any) => ({ id: st._id, title: st.title, description: st.description })),
+          })),
+        })),
+      })) as Project[]
+      setProjects(list)
+      if (!list.length) {
+        setProjectId(""); setModuleId(""); setSectionId("")
+        return
+      }
+      const pSel = list.find((p) => p.id === projectId) ?? list[0]
+      const mSel = pSel.modules.find((m) => m.id === moduleId) ?? pSel.modules[0]
+      const sSel = mSel?.sections.find((s) => s.id === sectionId) ?? mSel?.sections[0]
+      setProjectId(pSel?.id ?? "")
+      setModuleId(mSel?.id ?? "")
+      setSectionId(sSel?.id ?? "")
+    } catch {}
+  }
+
+  const slugify = (str: string) =>
+    str
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .slice(0, 64)
+
+  const openDuplicateModule = (mod: Module) => {
+    setDupBase(mod)
+    setDupName(`${mod.name} Copy`)
+    setDupOpen(true)
+  }
+
+  const duplicateModule = async () => {
+    if (!project || !dupBase) return
+    const newName = dupName.trim()
+    const newId = slugify(newName)
+    if (!newId) return
+    // optimistic update
+    setProjects((prev) => prev.map((p) => {
+      if (p.id !== project.id) return p
+      const src = p.modules.find((m) => m.id === dupBase.id)
+      if (!src) return p
+      const copy: Module = {
+        id: newId,
+        name: newName,
+        sections: src.sections.map((s) => ({ id: s.id, name: s.name, steps: s.steps.map((st) => ({ ...st })) })),
+      }
+      return { ...p, modules: [...p.modules, copy] }
+    }))
+    try {
+      await fetch('/api/projects/module/clone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project.id, sourceModuleId: dupBase.id, newModuleId: newId, newName }),
+      })
+    } finally {
+      setDupOpen(false)
+      setDupBase(null)
+      setDupName("")
+      refreshProjectsPreserve()
+    }
+  }
+
+  const startEdit = (st: TestStep) => {
+    setEditingStepId(st.id)
+    setEditTitle(st.title)
+    setEditDesc(st.description)
+  }
+
+  const discardEdit = () => {
+    setDiscardOpen(false)
+    setEditingStepId(null)
+    setEditTitle("")
+    setEditDesc("")
+  }
+
+  const saveEdit = async () => {
+    if (!project || !module || !section || !editingStepId) return
+    const payload = {
+      projectId: project.id,
+      moduleId: module.id,
+      sectionId: section.id,
+      stepId: editingStepId,
+      title: editTitle.trim(),
+      description: editDesc.trim(),
+    }
+    if (!payload.title || !payload.description) return
+    try {
+      await fetch('/api/projects/step', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      // Optimistically update local projects tree
+      setProjects((prev) => prev.map((p) => {
+        if (p.id !== payload.projectId) return p
+        return {
+          ...p,
+          modules: p.modules.map((m) => {
+            if (m.id !== payload.moduleId) return m
+            return {
+              ...m,
+              sections: m.sections.map((s) => {
+                if (s.id !== payload.sectionId) return s
+                return {
+                  ...s,
+                  steps: s.steps.map((x) => x.id === payload.stepId ? { ...x, title: payload.title, description: payload.description } : x)
+                }
+              })
+            }
+          })
+        }
+      }))
+      setEditingStepId(null)
+      setEditTitle("")
+      setEditDesc("")
+    } catch {}
+  }
+
+  // old duplicateModule(mod) removed; using openDuplicateModule + duplicateModule()
+
+  const requestDelete = (target: { type: 'module'|'section'|'step'; id: string; name: string }) => {
+    setDeleteTarget(target)
+    setDeleteOpen(true)
+  }
+
+  const performDelete = async () => {
+    if (!project || !deleteTarget) return
+    try {
+      if (deleteTarget.type === 'module') {
+        await fetch('/api/projects/module', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId: project.id, moduleId: deleteTarget.id }),
+        })
+      } else if (deleteTarget.type === 'section') {
+        await fetch('/api/projects/section', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId: project.id, moduleId: module?.id, sectionId: deleteTarget.id }),
+        })
+      } else if (deleteTarget.type === 'step') {
+        await fetch('/api/projects/step', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId: project.id, moduleId: module?.id, sectionId: section?.id, stepId: deleteTarget.id }),
+        })
+      }
+      setDeleteOpen(false)
+      setDeleteTarget(null)
+      await refreshProjectsPreserve()
+    } catch {
+      setDeleteOpen(false)
+      setDeleteTarget(null)
+    }
   }
 
   const quickPassSection = () => {
@@ -310,6 +496,24 @@ export default function TestCaseLabPage() {
     }
   }, [projectId, moduleId, sectionId])
 
+  // Listen for structure updates and refresh tree preserving selection
+  useEffect(() => {
+    let chan: any
+    const run = async () => {
+      try {
+        const { getPusherClient } = await import('@/lib/pusher-client')
+        const p = getPusherClient()
+        chan = p.subscribe('presence-tmt')
+        chan.bind('structure-updated', () => {
+          refreshProjectsPreserve()
+        })
+      } catch {}
+    }
+    run()
+    return () => { try { if (chan) chan.unsubscribe() } catch {} }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   return (
     <div className="h-[calc(100vh-4rem)] w-full p-4 flex flex-col overflow-hidden">
       {/* Top bar: Project selector (left) + Back arrow (right) + live viewers */}
@@ -354,20 +558,39 @@ export default function TestCaseLabPage() {
         {/* Modules sidebar */}
         <aside className="w-[240px] shrink-0 rounded-lg border h-full flex flex-col">
           <div className="border-b px-4 py-3 text-sm font-medium">Modules</div>
-          <div className="p-2 flex-1 overflow-y-auto">
-            <div className="flex flex-col gap-1">
-              {project?.modules.map((m) => (
-                <Button
-                  key={m.id}
-                  variant={m.id === moduleId ? "default" : "outline"}
-                  className="justify-start"
-                  onClick={() => handleSelectModule(m.id)}
-                >
-                  {m.name}
-                </Button>
-              ))}
+            <div className="p-2 flex-1 overflow-y-auto">
+              <div className="flex flex-col gap-1">
+                {project?.modules.map((m) => (
+                  <div key={m.id} className="relative group">
+                    <Button
+                      variant={m.id === moduleId ? "default" : "outline"}
+                      className="justify-start w-full pr-16"
+                      onClick={() => handleSelectModule(m.id)}
+                    >
+                      {m.name}
+                    </Button>
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        aria-label="Duplicate module"
+                        onClick={() => openDuplicateModule(m)}
+                        className="inline-flex p-2 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground"
+                        title="Duplicate module"
+                      >
+                        <Copy className="size-4" />
+                      </button>
+                      <button
+                        aria-label="Delete module"
+                        onClick={() => requestDelete({ type: 'module', id: m.id, name: m.name })}
+                        className="inline-flex p-2 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground"
+                        title="Delete module"
+                      >
+                        <Trash className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
         </aside>
 
         {/* Sections and Steps split */}
@@ -404,7 +627,7 @@ export default function TestCaseLabPage() {
                   <button
                     key={sec.id}
                     onClick={() => setSectionId(sec.id)}
-                    className={`w-full px-4 py-3 text-left hover:bg-accent/30 transition-colors ${
+                    className={`group w-full px-4 py-3 text-left hover:bg-accent/30 transition-colors ${
                       sec.id === sectionId ? "bg-accent/40" : ""
                     }`}
                   >
@@ -416,6 +639,14 @@ export default function TestCaseLabPage() {
                           {sec.steps.filter((st) => getStepStatus(getSectionKey(project!.id, module!.id, sec.id), st.id) === "passed").length}
                           /{sec.steps.length}
                         </div>
+                        <button
+                          aria-label="Delete section"
+                          onClick={(e) => { e.stopPropagation(); requestDelete({ type: 'section', id: sec.id, name: sec.name }) }}
+                          className="inline-flex p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Delete section"
+                        >
+                          <Trash className="size-4" />
+                        </button>
                       </div>
                     </div>
                   </button>
@@ -464,12 +695,47 @@ export default function TestCaseLabPage() {
                   const s = getStepStatus(sectionKey, step.id)
                   const displayNum = stepSort === "asc" ? idx + 1 : section.steps.length - idx
                   return (
-                    <div key={step.id} className="rounded-md border p-4">
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <div className="font-medium">{displayNum}. {step.title}</div>
-                         {statusBadge(s)}
+                    <div key={step.id} className="group relative rounded-md border p-4">
+                      {/* Status badge in top-right corner */}
+                      <div className="absolute top-2 right-2 pointer-events-none">
+                        {statusBadge(s)}
                       </div>
-                      <div className="mb-3 text-sm text-muted-foreground">{step.description}</div>
+
+                      <div className="mb-2 flex items-center justify-between gap-3 pr-12">
+                        <div className="font-medium">
+                          {editingStepId === step.id ? (
+                            <input
+                              value={editTitle}
+                              onChange={(e) => setEditTitle(e.target.value)}
+                              className="w-full rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                              placeholder="Step title"
+                            />
+                          ) : (
+                            <>{displayNum}. {step.title}</>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mb-3 text-sm text-muted-foreground">
+                        {editingStepId === step.id ? (
+                          <textarea
+                            value={editDesc}
+                            onChange={(e) => setEditDesc(e.target.value)}
+                            rows={3}
+                            className="w-full rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                            placeholder="Step description"
+                          />
+                        ) : (
+                          <div onDoubleClick={() => startEdit(step)} className="cursor-text">
+                            {step.description}
+                          </div>
+                        )}
+                      </div>
+                      {editingStepId === step.id && (
+                        <div className="mb-3 flex items-center gap-2">
+                          <Button size="sm" onClick={saveEdit}>Save</Button>
+                          <Button size="sm" variant="outline" onClick={() => setDiscardOpen(true)}>Discard</Button>
+                        </div>
+                      )}
                       {s === "blocked" && (
                         <div className="mb-3">
                           <textarea
@@ -481,43 +747,53 @@ export default function TestCaseLabPage() {
                           />
                         </div>
                       )}
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant={s === "failed" ? "destructive" : "outline"}
-                          onClick={() => setStepStatus(sectionKey, step.id, "failed")}
-                        >
-                          Failed
-                        </Button>
-                        <Button
-                          variant={s === "blocked" ? "secondary" : "outline"}
-                          onClick={() => setStepStatus(sectionKey, step.id, "blocked")}
-                        >
-                          Blocked
-                        </Button>
-                        <Button
-                          variant={s === "passed" ? "default" : "outline"}
-                          onClick={() => {
-                            if (section && sectionKey) {
-                              const beforeAllPassed = section.steps.every((st) => getStepStatus(sectionKey, st.id) === "passed")
-                              const afterAllPassed = section.steps.every((st) =>
-                                st.id === step.id ? true : getStepStatus(sectionKey, st.id) === "passed"
-                              )
-                              if (!beforeAllPassed && afterAllPassed) {
-                                setSectionCompleteName(section.name)
-                                setSectionCompleteOpen(true)
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant={s === "failed" ? "destructive" : "outline"}
+                            onClick={() => setStepStatus(sectionKey, step.id, "failed")}
+                          >
+                            Failed
+                          </Button>
+                          <Button
+                            variant={s === "blocked" ? "secondary" : "outline"}
+                            onClick={() => setStepStatus(sectionKey, step.id, "blocked")}
+                          >
+                            Blocked
+                          </Button>
+                          <Button
+                            variant={s === "passed" ? "default" : "outline"}
+                            onClick={() => {
+                              if (section && sectionKey) {
+                                const beforeAllPassed = section.steps.every((st) => getStepStatus(sectionKey, st.id) === "passed")
+                                const afterAllPassed = section.steps.every((st) =>
+                                  st.id === step.id ? true : getStepStatus(sectionKey, st.id) === "passed"
+                                )
+                                if (!beforeAllPassed && afterAllPassed) {
+                                  setSectionCompleteName(section.name)
+                                  setSectionCompleteOpen(true)
+                                }
                               }
-                            }
-                            setStepStatus(sectionKey, step.id, "passed")
-                          }}
+                              setStepStatus(sectionKey, step.id, "passed")
+                            }}
+                          >
+                            Passed
+                          </Button>
+                          <Button
+                            variant={s === "untested" ? "outline" : "outline"}
+                            onClick={() => setStepStatus(sectionKey, step.id, "untested")}
+                          >
+                            Reset
+                          </Button>
+                        </div>
+                        <button
+                          aria-label="Delete step"
+                          onClick={() => requestDelete({ type: 'step', id: step.id, name: step.title })}
+                          className="inline-flex p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Delete step"
                         >
-                          Passed
-                        </Button>
-                        <Button
-                          variant={s === "untested" ? "outline" : "outline"}
-                          onClick={() => setStepStatus(sectionKey, step.id, "untested")}
-                        >
-                          Reset
-                        </Button>
+                          <Trash className="size-4" />
+                        </button>
                       </div>
                     </div>
                   )
@@ -536,6 +812,53 @@ export default function TestCaseLabPage() {
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setSectionCompleteOpen(false)}>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* Discard edits confirmation */}
+      <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Discard changes?</AlertDialogTitle>
+          <AlertDialogDescription>
+            You have unsaved changes to this step. Do you want to discard them?
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setDiscardOpen(false)}>Keep editing</Button>
+            <AlertDialogAction onClick={discardEdit}>Discard</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* Delete confirmation */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Delete {deleteTarget?.type}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This action cannot be undone. It will permanently remove "{deleteTarget?.name}".
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={performDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Duplicate module dialog */}
+      <AlertDialog open={dupOpen} onOpenChange={setDupOpen}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Duplicate module</AlertDialogTitle>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm text-muted-foreground">New module name</label>
+            <input
+              value={dupName}
+              onChange={(e) => setDupName(e.target.value)}
+              className="w-full rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              placeholder={`${dupBase?.name ?? ''} Copy`}
+            />
+            <div className="text-xs text-muted-foreground">ID (slug): {dupName ? dupName.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').slice(0,64) : ''}</div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDupOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={duplicateModule}>Duplicate</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
