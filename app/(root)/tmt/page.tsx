@@ -73,6 +73,7 @@ export default function TestCaseLabPage() {
   const [dupOpen, setDupOpen] = useState(false)
   const [dupBase, setDupBase] = useState<Module | null>(null)
   const [dupName, setDupName] = useState("")
+  const [search, setSearch] = useState("")
 
   const project = useMemo(() => projects.find((p) => p.id === projectId), [projects, projectId])
   const module = useMemo(() => project?.modules.find((m) => m.id === moduleId), [project, moduleId])
@@ -195,6 +196,43 @@ export default function TestCaseLabPage() {
     if (stepSort === "desc") arr.reverse()
     return arr
   }
+
+  const q = useMemo(() => search.trim().toLowerCase(), [search])
+
+  const filteredModules = useMemo(() => {
+    if (!project) return [] as Module[]
+    if (!q) return project.modules
+    return project.modules.filter((m) => {
+      if (m.name.toLowerCase().includes(q)) return true
+      for (const s of m.sections) {
+        if (s.name.toLowerCase().includes(q)) return true
+        for (const st of s.steps) {
+          if (
+            st.title.toLowerCase().includes(q) ||
+            st.description.toLowerCase().includes(q)
+          )
+            return true
+        }
+      }
+      return false
+    })
+  }, [project, q])
+
+  const filteredSections = useMemo(() => {
+    if (!module) return [] as Section[]
+    if (!q) return module.sections
+    return module.sections.filter((s) => {
+      if (s.name.toLowerCase().includes(q)) return true
+      for (const st of s.steps) {
+        if (
+          st.title.toLowerCase().includes(q) ||
+          st.description.toLowerCase().includes(q)
+        )
+          return true
+      }
+      return false
+    })
+  }, [module, q])
 
   // Refresh projects preserving current selection when possible
   const refreshProjectsPreserve = async () => {
@@ -518,9 +556,9 @@ export default function TestCaseLabPage() {
     <div className="h-[calc(100vh-4rem)] w-full p-4 flex flex-col overflow-hidden">
       {/* Top bar: Project selector (left) + Back arrow (right) + live viewers */}
       <div className="mb-4 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full max-w-[720px]">
           <Select value={projectId} onValueChange={handleSelectProject}>
-            <SelectTrigger className="min-w-[220px]">
+            <SelectTrigger className="min-w-[240px]">
               <SelectValue placeholder="Select project" />
             </SelectTrigger>
             <SelectContent>
@@ -531,6 +569,12 @@ export default function TestCaseLabPage() {
               ))}
             </SelectContent>
           </Select>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search modules, sections, steps…"
+            className="ml-3 flex-1 rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          />
         </div>
         <div className="flex items-center gap-4">
           <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
@@ -560,8 +604,8 @@ export default function TestCaseLabPage() {
           <div className="border-b px-4 py-3 text-sm font-medium">Modules</div>
             <div className="p-2 flex-1 overflow-y-auto">
               <div className="flex flex-col gap-1">
-                {project?.modules.map((m) => (
-                  <div key={m.id} className="relative group">
+              {filteredModules.map((m) => (
+                <div key={m.id} className="relative group">
                     <Button
                       variant={m.id === moduleId ? "default" : "outline"}
                       className="justify-start w-full pr-16"
@@ -621,7 +665,7 @@ export default function TestCaseLabPage() {
             </HoverCard>
             <div className="border-b px-4 py-3 text-sm font-medium">Sections</div>
             <div className="divide-y flex-1 overflow-y-auto">
-              {module?.sections.map((sec) => {
+              {filteredSections.map((sec) => {
                 const sStatus = computeSectionStatus(sec)
                 return (
                   <button
@@ -691,7 +735,7 @@ export default function TestCaseLabPage() {
                 {loadingRun && (
                   <div className="text-xs text-muted-foreground">Loading…</div>
                 )}
-                {sortedSteps(section).map((step, idx) => {
+                {(q ? sortedSteps(section).filter((st) => st.title.toLowerCase().includes(q) || st.description.toLowerCase().includes(q)) : sortedSteps(section)).map((step, idx) => {
                   const s = getStepStatus(sectionKey, step.id)
                   const displayNum = stepSort === "asc" ? idx + 1 : section.steps.length - idx
                   return (
