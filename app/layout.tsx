@@ -13,6 +13,7 @@ import {
 } from "@clerk/nextjs";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { SiteHeader } from "@/components/site-header";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -51,30 +52,7 @@ export default function RootLayout({
             enableSystem={false}
             disableTransitionOnChange
           >
-            <header className="flex justify-between items-center p-4 gap-4 h-16 border-b">
-              <Link href="/" className="font-medium">Reality - Test Management Tool</Link>
-              <div className="flex items-center gap-3">
-                <SignedOut>
-                  <SignInButton>
-                    <Button variant="outline">Sign In</Button>
-                  </SignInButton>
-                  <SignUpButton>
-                    <Button>Sign Up</Button>
-                  </SignUpButton>
-                </SignedOut>
-                <SignedIn>
-                  <Link href="/tmt" className="text-sm text-muted-foreground hover:text-foreground">TMT</Link>
-                  <Link href="/tmt/admin" className="text-sm text-muted-foreground hover:text-foreground">Admin</Link>
-                  <span
-                    title="Under construction"
-                    className="text-sm text-muted-foreground hover:text-foreground cursor-not-allowed select-none"
-                  >
-                    Charts
-                  </span>
-                  <UserButton />
-                </SignedIn>
-              </div>
-            </header>
+            <SiteHeader />
             {children}
           </ThemeProvider>
         </body>

@@ -62,6 +62,8 @@ export default function TestCaseLabPage() {
   const [editingStepId, setEditingStepId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState<string>("")
   const [editDesc, setEditDesc] = useState<string>("")
+  const [editingCommentStepId, setEditingCommentStepId] = useState<string | null>(null)
+  const [commentDraft, setCommentDraft] = useState<string>("")
   const [discardOpen, setDiscardOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<
@@ -368,6 +370,48 @@ export default function TestCaseLabPage() {
     } catch {}
   }
 
+  const startEditComment = (stepId: string) => {
+    setEditingCommentStepId(stepId)
+    setCommentDraft(getStepComment(sectionKey, stepId))
+  }
+
+  const cancelEditComment = () => {
+    setEditingCommentStepId(null)
+    setCommentDraft("")
+  }
+
+  const saveComment = async (stepId: string) => {
+    if (!project || !module || !section || !sectionKey) { cancelEditComment(); return }
+    const comment = commentDraft.trim()
+    // optimistic local update (preserve current status)
+    setRuns((prev) => ({
+      ...prev,
+      [sectionKey]: {
+        ...prev[sectionKey],
+        [stepId]: {
+          ...(prev[sectionKey]?.[stepId] ?? { status: "blocked" as StepStatus }),
+          comment,
+        },
+      },
+    }))
+    try {
+      await fetch('/api/runs', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: project.id,
+          moduleId: module.id,
+          sectionId: section.id,
+          stepId,
+          status: getStepStatus(sectionKey, stepId),
+          comment,
+        }),
+      })
+    } finally {
+      cancelEditComment()
+    }
+  }
+
   // old duplicateModule(mod) removed; using openDuplicateModule + duplicateModule()
 
   const requestDelete = (target: { type: 'module'|'section'|'step'; id: string; name: string }) => {
@@ -534,7 +578,7 @@ export default function TestCaseLabPage() {
     }
   }, [projectId, moduleId, sectionId])
 
-  // Listen for structure updates and refresh tree preserving selection
+  // Listen for structure updates and step changes globally; refresh/merge so UI updates live
   useEffect(() => {
     let chan: any
     const run = async () => {
@@ -545,15 +589,29 @@ export default function TestCaseLabPage() {
         chan.bind('structure-updated', () => {
           refreshProjectsPreserve()
         })
+        chan.bind('step-updated', (evt: { projectId: string; moduleId: string; sectionId: string; stepId: string; status: StepStatus; comment?: string }) => {
+          if (!project || evt.projectId !== project.id) return
+          const key = getSectionKey(evt.projectId, evt.moduleId, evt.sectionId)
+          setRuns((prev) => ({
+            ...prev,
+            [key]: {
+              ...(prev[key] ?? {}),
+              [evt.stepId]: {
+                ...(prev[key]?.[evt.stepId] ?? { status: 'untested' }),
+                status: evt.status,
+                comment: evt.comment ?? prev[key]?.[evt.stepId]?.comment,
+              },
+            },
+          }))
+        })
       } catch {}
     }
     run()
     return () => { try { if (chan) chan.unsubscribe() } catch {} }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [projectId])
 
   return (
-    <div className="h-[calc(100vh-4rem)] w-full p-4 flex flex-col overflow-hidden">
+    <div className="h-screen w-full p-4 flex flex-col overflow-hidden">
       {/* Top bar: Project selector (left) + Back arrow (right) + live viewers */}
       <div className="mb-4 flex items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3 w-full max-w-[720px]">
@@ -575,6 +633,9 @@ export default function TestCaseLabPage() {
             placeholder="Search modules, sections, steps…"
             className="ml-3 flex-1 rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
           />
+          <Link href="/tmt/admin">
+            <Button size="sm" className="shrink-0">+ add</Button>
+          </Link>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
@@ -668,9 +729,17 @@ export default function TestCaseLabPage() {
               {filteredSections.map((sec) => {
                 const sStatus = computeSectionStatus(sec)
                 return (
-                  <button
+                  <div
                     key={sec.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setSectionId(sec.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSectionId(sec.id)
+                      }
+                    }}
                     className={`group w-full px-4 py-3 text-left hover:bg-accent/30 transition-colors ${
                       sec.id === sectionId ? "bg-accent/40" : ""
                     }`}
@@ -693,7 +762,7 @@ export default function TestCaseLabPage() {
                         </button>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 )
               })}
               {!module?.sections?.length && (
@@ -782,13 +851,26 @@ export default function TestCaseLabPage() {
                       )}
                       {s === "blocked" && (
                         <div className="mb-3">
-                          <textarea
-                            value={getStepComment(sectionKey, step.id)}
-                            onChange={(e) => setStepComment(sectionKey, step.id, e.target.value)}
-                            placeholder="Dodaj komentarz do blokady..."
-                            className="w-full rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                            rows={3}
-                          />
+                          {editingCommentStepId === step.id ? (
+                            <textarea
+                              value={commentDraft}
+                              onChange={(e) => setCommentDraft(e.target.value)}
+                              onBlur={() => saveComment(step.id)}
+                              placeholder="Dodaj komentarz do blokady..."
+                              className="w-full rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                              rows={3}
+                              autoFocus
+                            />
+                          ) : (
+                            <div
+                              onDoubleClick={() => startEditComment(step.id)}
+                              className="cursor-text whitespace-pre-wrap"
+                            >
+                              {getStepComment(sectionKey, step.id) || (
+                                <span className="text-muted-foreground italic">Double‑click to add a comment…</span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                       <div className="mt-3 flex items-center justify-between gap-2">

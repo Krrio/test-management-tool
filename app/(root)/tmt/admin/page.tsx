@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { addModule, addSection, addStep, createProject } from "./actions";
+import { ArrowLeft } from "lucide-react";
 
 type Step = { id: string; title: string; description: string };
 type Section = { id: string; name: string; steps: Step[] };
@@ -39,8 +40,16 @@ export default function AdminPage() {
   useEffect(() => { refresh(); }, []);
 
   return (
-    <div className="h-[calc(100vh-4rem)] w-full p-4 flex gap-6 overflow-hidden">
-      <div className="w-1/2 min-w-0 rounded-lg border h-full p-4 overflow-y-auto">
+    <div className="h-screen w-full p-4 flex flex-col gap-4 overflow-hidden">
+      <div className="flex items-center justify-between shrink-0">
+        <div className="text-sm text-muted-foreground">Admin</div>
+        <a href="/tmt" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="scale-75"/>
+          Back to TMT
+        </a>
+      </div>
+      <div className="flex gap-6 flex-1 min-h-0">
+        <div className="w-1/2 min-w-0 rounded-lg border h-full p-4 overflow-y-auto">
         <div className="font-medium mb-3">Create Project</div>
         <ProjectForm onSuccess={async () => { await refresh(); setMsg('Project created'); }} />
 
@@ -128,6 +137,7 @@ export default function AdminPage() {
         {msg && (
           <div className="mt-6 text-xs text-muted-foreground">{msg}</div>
         )}
+      </div>
       </div>
     </div>
   );
@@ -267,4 +277,3 @@ function StepForm({ projectId, moduleId, sectionId, onSuccess }: { projectId: st
     </div>
   );
 }
-

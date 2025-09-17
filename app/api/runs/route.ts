@@ -67,6 +67,17 @@ export async function PATCH(req: NextRequest) {
       updatedBy: userId,
       updatedAt: now.toISOString(),
     });
+    // Also broadcast globally so other sections lists can update without subscribing to each section
+    await pusher.trigger("presence-tmt", "step-updated", {
+      projectId,
+      moduleId,
+      sectionId,
+      stepId,
+      status,
+      comment: typeof comment === "string" ? comment : undefined,
+      updatedBy: userId,
+      updatedAt: now.toISOString(),
+    });
   } catch (e) {
     // ignore broadcast errors in skeleton
   }

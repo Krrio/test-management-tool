@@ -1,0 +1,3 @@
+/* animation */
+@keyframes lineflow{0%{transform:translateY(-60%);opacity:.35}50%{opacity:.7}100%{transform:translateY(60%);opacity:.35}}
+.line-flow{animation:lineflow 2.6s linear infinite}
