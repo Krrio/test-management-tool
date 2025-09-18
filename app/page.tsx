@@ -109,7 +109,7 @@ export default function Home() {
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
               <SignedIn>
                 <Link href="/tmt">
-                  <Button className="rounded-full px-6" size="lg">
+                  <Button className="rounded-full px-6 cursor-pointer" size="lg">
                     <Play className="mr-2 size-4" /> Open App
                   </Button>
                 </Link>
@@ -122,7 +122,7 @@ export default function Home() {
                 </Link>
               </SignedOut>
               <Link href="#discover">
-                <Button className="rounded-full px-6 h-[44px] w-[132px]! bg-black!" size="lg" variant="outline">
+                <Button className="rounded-full px-6 h-[44px] w-[132px]! bg-black! cursor-pointer" size="lg" variant="outline">
                   Docs
                 </Button>
               </Link>
