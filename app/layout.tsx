@@ -14,7 +14,6 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/site-header";
-import { SmoothScqroolProvider } from "@/components/smooth-scqrool-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -53,7 +52,6 @@ export default function RootLayout({
             enableSystem={false}
             disableTransitionOnChange
           >
-            <SmoothScqroolProvider />
             <SiteHeader />
             {children}
           </ThemeProvider>
