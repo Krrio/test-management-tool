@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, Shield, Play, ChevronDown, Circle, CircleDot } from "lucide-react";
+import { ChevronRight, Shield, Play, ChevronDown, Circle, CircleDot, ArrowBigRight, ArrowRight } from "lucide-react";
 import "./home.css";
 
 export default function Home() {
@@ -42,47 +42,31 @@ export default function Home() {
             />
           </div>
 
-          {/* Corner lines like reference (thin, horizontal then smooth corner) */}
-          <svg
-            className="pointer-events-none absolute inset-0 opacity-60"
-            viewBox="0 0 1440 900"
-            preserveAspectRatio="none"
+          {/* Corner line overlays (PNG versions) */}
+          <img
+            src="/Vector%201-2.png"
+            alt=""
             aria-hidden
-          >
-            <defs>
-              <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="1.2" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-            <g stroke="white" strokeWidth="1.2" fill="none" strokeLinecap="round" filter="url(#glow)">
-              {/* LEFT side (shorter, raised by 100px) */}
-              <g>
-                {/* upper */}
-                <path d="M0 100 H 240 C 360 100 420 120 500 160 S 620 200 680 220" strokeOpacity="0.22" />
-                <circle cx="240" cy="100" r="14" strokeOpacity="0.35" />
-                <circle cx="240" cy="100" r="6" strokeOpacity="0.18" />
-                {/* lower */}
-                <path d="M0 600 H 240 C 360 600 440 580 500 540 S 620 500 680 500" strokeOpacity="0.22" />
-                <circle cx="240" cy="600" r="14" strokeOpacity="0.35" />
-                <circle cx="240" cy="600" r="6" strokeOpacity="0.18" />
-              </g>
-
-                            {/* RIGHT side = mirror of left around vertical center */}
-              <g transform="translate(1440,0) scale(-1,1)">
-                <path d="M0 100 H 240 C 360 100 420 120 500 160 S 620 200 680 220" strokeOpacity="0.22" />
-                <circle cx="240" cy="100" r="14" strokeOpacity="0.35" />
-                <circle cx="240" cy="100" r="6" strokeOpacity="0.18" />
-
-                <path d="M0 600 H 240 C 360 600 440 580 500 540 S 620 500 680 500" strokeOpacity="0.22" />
-                <circle cx="240" cy="600" r="14" strokeOpacity="0.35" />
-                <circle cx="240" cy="600" r="6" strokeOpacity="0.18" />
-              </g>
-            </g>
-          </svg>
+            className="pointer-events-none select-none absolute left-0 top-[110px] opacity-80 h-auto w-[200px] sm:w-[280px] md:w-[360px] lg:w-[480px] 2xl:w-[640px] hero-line 2xl:top-[280px]"
+          />
+          <img
+            src="/Vector%201.png"
+            alt=""
+            aria-hidden
+            className="pointer-events-none select-none absolute left-0 top-[520px] opacity-80 h-auto w-[200px] sm:w-[280px] md:w-[360px] lg:w-[480px] 2xl:w-[640px] hero-line 2xl:top-[860px]"
+          />
+          <img
+            src="/Vector%201-3.png"
+            alt=""
+            aria-hidden
+            className="pointer-events-none select-none absolute right-0 top-[110px] opacity-80 h-auto w-[200px] sm:w-[280px] md:w-[360px] lg:w-[480px] 2xl:w-[640px] hero-line 2xl:top-[280px]"
+          />
+          <img
+            src="/Vector%201-4.png"
+            alt=""
+            aria-hidden
+            className="pointer-events-none select-none absolute right-0 top-[520px] opacity-80 h-auto w-[200px] sm:w-[280px] md:w-[360px] lg:w-[480px] 2xl:w-[640px] hero-line 2xl:top-[860px]"
+          />
 
           {/* Top-left logo mark */}
           {/* <div className="absolute left-4 top-4 z-20 hidden sm:block">
@@ -109,8 +93,8 @@ export default function Home() {
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
               <SignedIn>
                 <Link href="/tmt">
-                  <Button className="rounded-full px-6 cursor-pointer" size="lg">
-                    <Play className="mr-2 size-4" /> Open App
+                  <Button className="rounded-full px-6 cursor-pointer group" size="lg">
+                    Open App<ArrowRight className="mr-2 size-4 rotate-315 group-hover:translate-x-2 transition-all ease-in-out" />
                   </Button>
                 </Link>
               </SignedIn>
@@ -122,7 +106,7 @@ export default function Home() {
                 </Link>
               </SignedOut>
               <Link href="#discover">
-                <Button className="rounded-full px-6 h-[44px] w-[132px]! bg-black! cursor-pointer" size="lg" variant="outline">
+                <Button className="rounded-full px-6 h-[44px] w-[132px]! bg-[#1a1a1a]! border-none cursor-pointer" size="lg" variant="outline">
                   Docs
                 </Button>
               </Link>
@@ -139,35 +123,70 @@ export default function Home() {
           <div className="pointer-events-none absolute left-[calc(50%-24px)] top-[68%] h-[30%] w-px overflow-hidden">
             <span className="block w-px h-[180%] bg-gradient-to-b from-transparent via-white/30 to-transparent line-flow" style={{ animationDelay: "1.2s" }} />
           </div>
-          {/* Data labels near line nodes */}
-          <div className="pointer-events-none absolute left-[260px] top-[120px] hidden lg:block text-white/80">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="inline-block size-1.5 rounded-full bg-white" />
-              <span className="tracking-tight">Test cases</span>
-            </div>
-            <div className="ml-5 text-[10px] text-white/60">2,137</div>
+          {/* Data markers anchored to each line */}
+          <div className="pointer-events-none absolute left-[226px] top-[210px] 2xl:top-[420px] hidden md:flex items-center gap-4 text-white/80">
+            <div className="rounded-full border">
+            <img
+              src="/shape-1.png"
+              alt=""
+              aria-hidden
+              className="h-[38px] w-[38px] sm:h-[44px] sm:w-[44px] lg:h-[52px] lg:w-[52px] opacity-90 drop-shadow-[0_0_12px_rgba(255,255,255,0.16)]"
+            />
           </div>
-          <div className="pointer-events-none absolute left-[260px] top-[620px] hidden lg:block text-white/80">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="inline-block size-1.5 rounded-full bg-white" />
-              <span className="tracking-tight">Steps</span>
+            <div className="flex flex-col text-left leading-tight">
+              <div className="flex items-center gap-2 text-xs sm:text-sm font-medium">
+                <span className="inline-block size-1.5 rounded-full bg-white" /> Test Steps
+              </div>
+              <span className="pl-4 text-[10px] sm:text-xs text-white/60">20.945</span>
             </div>
-            <div className="ml-5 text-[10px] text-white/60">982</div>
           </div>
-          {/* Right side labels near right markers */}
-          <div className="pointer-events-none absolute right-[260px] top-[120px] hidden lg:block text-right text-white/80">
-            <div className="flex items-center justify-end gap-2 text-xs">
-              <span className="tracking-tight">Projects</span>
-              <span className="inline-block size-1.5 rounded-full bg-white" />
-            </div>
-            <div className="mr-5 text-[10px] text-white/60">2,077</div>
+          <div className="pointer-events-none absolute left-[156px] top-[495px] 2xl:top-[835px]  hidden md:flex items-center gap-4 text-white/80">
+          <div className="rounded-full border">
+            <img
+              src="/shape-2.png"
+              alt=""
+              aria-hidden
+              className="h-[38px] w-[38px] sm:h-[44px] sm:w-[44px] lg:h-[52px] lg:w-[52px] opacity-90 drop-shadow-[0_0_12px_rgba(255,255,255,0.16)]"
+            />
           </div>
-          <div className="pointer-events-none absolute right-[260px] top-[620px] hidden lg:block text-right text-white/80">
-            <div className="flex items-center justify-end gap-2 text-xs">
-              <span className="tracking-tight">Modules</span>
-              <span className="inline-block size-1.5 rounded-full bg-white" />
+            <div className="flex flex-col text-left leading-tight">
+              <div className="flex items-center gap-2 text-xs sm:text-sm font-medium">
+                <span className="inline-block size-1.5 rounded-full bg-white" /> Sections
+              </div>
+              <span className="pl-4 text-[10px] sm:text-xs text-white/60">19.346</span>
             </div>
-            <div className="mr-5 text-[10px] text-white/60">440</div>
+          </div>
+          <div className="pointer-events-none absolute right-[176px] top-[210px] 2xl:top-[420px] hidden md:flex items-center gap-4 text-white/80">
+            <div className="rounded-full border">
+            <img
+              src="/shape-3.png"
+              alt=""
+              aria-hidden
+              className="h-[38px] w-[38px] sm:h-[44px] sm:w-[44px] lg:h-[52px] lg:w-[52px] opacity-90 drop-shadow-[0_0_12px_rgba(255,255,255,0.16)]"
+            />
+          </div>
+            <div className="flex flex-col text-right leading-tight">
+              <div className="flex items-center justify-end gap-2 text-xs sm:text-sm font-medium">
+                Projects <span className="inline-block size-1.5 rounded-full bg-white" />
+              </div>
+              <span className="pr-4 text-[10px] sm:text-xs text-white/60">2,077</span>
+            </div>
+          </div>
+          <div className="pointer-events-none absolute right-[86px] top-[495px] 2xl:top-[835px]  hidden md:flex items-center gap-4 text-white/80">
+            <div className="rounded-full border">
+            <img
+              src="/shape-4.png"
+              alt=""
+              aria-hidden
+              className="h-[38px] w-[38px] sm:h-[44px] sm:w-[44px] lg:h-[52px] lg:w-[52px] opacity-90 drop-shadow-[0_0_12px_rgba(255,255,255,0.16)]"
+            />
+          </div>
+            <div className="flex flex-col text-right leading-tight">
+              <div className="flex items-center justify-end gap-2 text-xs sm:text-sm font-medium">
+                Modules <span className="inline-block size-1.5 rounded-full bg-white" />
+              </div>
+              <span className="pr-4 text-[10px] sm:text-xs text-white/60">440</span>
+            </div>
           </div>
           {/* Scroll hint bottom-left */}
           <div className="absolute left-4 bottom-4">
