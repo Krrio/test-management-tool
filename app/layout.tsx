@@ -14,7 +14,6 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/site-header";
-import { SmoothScrollProvider } from "@/components/smooth-scroll-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -53,7 +52,6 @@ export default function RootLayout({
             enableSystem={false}
             disableTransitionOnChange
           >
-            <SmoothScrollProvider />
             <SiteHeader />
             {children}
           </ThemeProvider>
