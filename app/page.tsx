@@ -11,7 +11,7 @@ export default function Home() {
       <Hero />
       <div className="my-6 w-full">
         <Companies />
-      </div>x
+      </div>
       <Features />
     </>
   );
