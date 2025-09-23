@@ -209,7 +209,7 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
 
     // --- Auto rotation only (no manual drag, no zoom) ---
     const rotation: [number, number, number?] = [0, 0, 0]
-    const rotationSpeed = 0.08 // wolniejsze obroty (z 0.5 -> 0.08)
+    const rotationSpeed = 0 // wolniejsze obroty (z 0.5 -> 0.08)
 
     const rotate = () => {
       rotation[0] += rotationSpeed
@@ -244,7 +244,7 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
     <div className={`relative ${className}`}>
       <canvas
         ref={canvasRef}
-        style={{ maxWidth: "125%", height: "auto", scale: "0.75" }}
+        style={{ maxWidth: "135%", height: "auto", scale: "0.75" }}
       />
     </div>
   )
