@@ -78,35 +78,35 @@ const Hero = () => {
           <section className="relative z-10 mx-auto flex h-full max-w-4xl flex-col items-center justify-center text-center px-6">
             {/* small pill above title */}
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border bg-white/5 px-3 py-2 text-xs text-white/80 backdrop-blur">
-              <span className="inline-flex h-2 w-2 rounded-full bg-white/70" /> Unlock full potential
+              <span className="inline-flex h-2 w-2 rounded-full bg-white/70 font-devis" /> Unlock full potential
               <ChevronRight className="size-3.5" />
             </div>
 
-            <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold tracking-tight leading-[1.08]">
+            <h1 className="text-4xl sm:text-6xl md:text-7xl tracking-tight leading-[1.08] font-devis">
               <span className="text-white">Streamline Your</span><br />
               <span className="ml-2 bg-clip-text text-transparent animate-gradient-text">Testing.</span>
             </h1>
-            <p className="mt-4 max-w-2xl text-sm sm:text-base text-white/70">
+            <p className="mt-4 max-w-2xl text-sm sm:text-base text-white/70 font-devis">
               Centralize every test case, plan, and result. Ship with confidence, faster.
             </p>
 
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
               <SignedIn>
                 <Link href="/tmt">
-                  <Button className="rounded-full px-6 cursor-pointer group" size="lg">
+                  <Button className="rounded-full px-6 cursor-pointer group font-devis" size="lg">
                     Open App<ArrowRight className="mr-2 size-4 rotate-315 group-hover:translate-x-2 transition-all ease-in-out" />
                   </Button>
                 </Link>
               </SignedIn>
               <SignedOut>
                 <Link href="/sign-in">
-                  <Button className="rounded-full px-6" size="lg">
+                  <Button className="rounded-full px-6 font-devis" size="lg">
                     Let's start
                   </Button>
                 </Link>
               </SignedOut>
               <Link href="#discover">
-                <Button className="rounded-full px-6 h-[44px] w-[132px]! bg-[#1a1a1a]! border-none cursor-pointer" size="lg" variant="outline">
+                <Button className="rounded-full px-6 h-[44px] w-[132px]! bg-[#1a1a1a]! border-none cursor-pointer font-devis" size="lg" variant="outline">
                   Docs
                 </Button>
               </Link>
@@ -134,7 +134,7 @@ const Hero = () => {
             />
           </div>
             <div className="flex flex-col text-left leading-tight">
-              <div className="flex items-center gap-2 text-xs sm:text-sm font-medium">
+              <div className="flex items-center gap-2 text-xs sm:text-sm font-medium font-devis">
                 <span className="inline-block size-1.5 rounded-full bg-white" /> Test Steps
               </div>
               <span className="pl-4 text-[10px] sm:text-xs text-white/60">20.945</span>
@@ -150,7 +150,7 @@ const Hero = () => {
             />
           </div>
             <div className="flex flex-col text-left leading-tight">
-              <div className="flex items-center gap-2 text-xs sm:text-sm font-medium">
+              <div className="flex items-center gap-2 text-xs sm:text-sm font-medium font-devis">
                 <span className="inline-block size-1.5 rounded-full bg-white" /> Sections
               </div>
               <span className="pl-4 text-[10px] sm:text-xs text-white/60">19.346</span>
@@ -166,7 +166,7 @@ const Hero = () => {
             />
           </div>
             <div className="flex flex-col text-right leading-tight">
-              <div className="flex items-center justify-end gap-2 text-xs sm:text-sm font-medium">
+              <div className="flex items-center justify-end gap-2 text-xs sm:text-sm font-medium font-devis">
                 Projects <span className="inline-block size-1.5 rounded-full bg-white" />
               </div>
               <span className="pr-4 text-[10px] sm:text-xs text-white/60">2,077</span>
@@ -182,7 +182,7 @@ const Hero = () => {
             />
           </div>
             <div className="flex flex-col text-right leading-tight">
-              <div className="flex items-center justify-end gap-2 text-xs sm:text-sm font-medium">
+              <div className="flex items-center justify-end gap-2 text-xs sm:text-sm font-medium font-devis">
                 Modules <span className="inline-block size-1.5 rounded-full bg-white" />
               </div>
               <span className="pr-4 text-[10px] sm:text-xs text-white/60">440</span>

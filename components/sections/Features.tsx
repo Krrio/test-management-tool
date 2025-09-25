@@ -7,32 +7,32 @@ import { BookmarkIcon, CheckAllIcon, LinkIcon, TagIcon } from "@/public/svgs";
 
 const Features = () => {
   return (
-    <main className="relative w-full overflow-hidden mb-20">
+    <main className="relative w-full overflow-hidden mb-6 font-devis">
       <div className="relative z-10 h-full w-full bg-black">
         <div className="relative h-full max-w-[calc(100%-2rem)] mx-auto bg-black/85 text-white overflow-hidden rounded-[32px] shadow-2xl">
-          {/* <div
-            className="absolute right-[-20%] top-[-40%] h-[120%] w-[52%] blur-3xl"
+          <div
+            className="absolute right-[-30%] top-[-70%] h-[120%] w-[52%] blur-3xl"
             style={{
               background:
                 "radial-gradient(56% 56% at 50% 50%, rgba(180,210,255,0.42), rgba(180,210,255,0.22) 42%, rgba(0,0,0,0) 70%)",
             }}
           />
           <div
-            className="absolute left-[-40%] bottom-[-80%] h-[120%] w-[52%] blur-3xl opacity-80 rotate"
+            className="absolute left-[-39%] bottom-[-50%] h-[120%] w-[58%] blur-3xl opacity-80 rotate"
             style={{
               background:
-                "radial-gradient(75% 62% at 80% 12%, rgba(255,255,255,0.92) 0%, rgba(243,248,246,0.62) 24%, rgba(206,232,218,0.32) 48%, rgba(0,0,0,0) 72%)",
+                "radial-gradient(56% 56% at 50% 50%, rgba(180,210,255,0.42), rgba(180,210,255,0.22) 42%, rgba(0,0,0,0) 70%)",
             }}
-          /> */}
+          />
           <div className="flex h-full flex-col items-center justify-start mt-10 text-center">
-            <h1 className="font-display mb-4 bg-clip-text text-center text-4xl font-bold tracking-tight whitespace-nowrap sm:text-5xl md:text-6xl lg:text-6xl">
+            <h1 className="font-display mb-4 bg-clip-text text-center text-4xl tracking-tight whitespace-nowrap sm:text-5xl md:text-6xl lg:text-6xl font-devis">
               Meet Marvelous Features
             </h1>
-            <p className="text-gray-300/90">
+            <p className="text-gray-300/90 font-devis">
               Save Your team's time and effort with our comprehensive test management tool.
             </p>
 
-            <div className="mt-20 grid grid-cols-3 grid-rows-3 gap-2 m-4 md:grid-cols-3 md:grid-rows-3 md:gap-2 max-w-5xl w-full h-[700px]">
+            <div className="mt-20 grid grid-cols-3 grid-rows-3 gap-2 m-4 md:grid-cols-3 md:grid-rows-3 md:gap-2 max-w-5xl w-full h-[700px] mb-12">
   <div className="col-span-3 col-start-1 row-span-2 row-start-1 rounded-[52px] bg-[#131313] p-10 md:col-span-2 md:col-start-1 md:row-span-2 md:row-start-1 overflow-hidden relative">
     <RotatingEarth className="absolute 2xl:top-[-65%] 2xl:right-[-20%] right-[-25%] top-[-65%] opacity-40 scale-100" />
     {/* <Image src="/globe.png" alt="globe" width={240} height={240} className="absolute top-[-20] right-[-20] scale-145 opacity-35"/> */}
@@ -132,8 +132,8 @@ const Features = () => {
                 <div className="h-full w-full flex flex-col items-center justify-center space-y-18">
                   <Image src="/images/chart-features.png" alt="chart" width={242} height={242} />
                   <div className="text-center">
-                    <p className="text-white text-2xl 2xl:text-3xl">Global Run Pulse</p>
-                    <p className="text-[#878787] text-md racking-wide leading-relaxed max-w-2xl 2xl:text-lg">Future-driven map of quality.</p>
+                    <p className="text-white text-2xl 2xl:text-3xl">Increased efficiency</p>
+                    <p className="text-[#878787] text-md racking-wide leading-relaxed max-w-2xl 2xl:text-lg">Seamless build-up.</p>
                   </div>
                 </div>
               </div>
