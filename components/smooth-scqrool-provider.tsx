@@ -3,8 +3,9 @@
 import { useEffect } from "react";
 import { gsap } from "gsap";
 import { ScrollToPlugin } from "gsap/ScrollToPlugin";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 
-gsap.registerPlugin(ScrollToPlugin);
+gsap.registerPlugin(ScrollToPlugin, ScrollTrigger);
 
 export function SmoothScqroolProvider() {
   useEffect(() => {
@@ -154,7 +155,13 @@ export function SmoothScqroolProvider() {
         ? () => prefersReducedMotion.removeEventListener("change", handleMotionChange)
         : () => prefersReducedMotion.removeListener(handleMotionChange);
 
+    const handleScrollTriggerRefresh = () => {
+      updateBounds();
+    };
+
     addMotionListener();
+
+    ScrollTrigger.addEventListener("refresh", handleScrollTriggerRefresh);
 
     if (!prefersReducedMotion.matches) {
       addInteractions();
@@ -163,6 +170,7 @@ export function SmoothScqroolProvider() {
     return () => {
       removeInteractions();
       removeMotionListener();
+      ScrollTrigger.removeEventListener("refresh", handleScrollTriggerRefresh);
       gsap.killTweensOf(window);
     };
   }, []);

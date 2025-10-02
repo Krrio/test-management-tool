@@ -4,6 +4,9 @@ import Hero from "@/components/sections/Hero";
 import { SmoothScqroolProvider } from "@/components/smooth-scqrool-provider";
 import { Companies } from "@/components/socialproof";
 import Insights from "@/components/sections/Insights";
+import Tutorial from "@/components/sections/Tutorial";
+import Highlights from "@/components/sections/Higihligths";
+import Footer from "@/components/sections/Footer";
 
 export default function Home() {
   return (
@@ -15,6 +18,9 @@ export default function Home() {
       </div>
       <Features />
       <Insights />
+      <Tutorial />
+      <Highlights />
+      <Footer />
     </>
   );
 }
