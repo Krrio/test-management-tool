@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { addModule, addSection, addStep, createProject } from "./actions";
@@ -52,6 +52,11 @@ export default function AdminPage() {
         <div className="w-1/2 min-w-0 rounded-lg border h-full p-4 overflow-y-auto">
         <div className="font-medium mb-3">Create Project</div>
         <ProjectForm onSuccess={async () => { await refresh(); setMsg('Project created'); }} />
+
+        <div className="h-px bg-border my-6" />
+
+        <div className="font-medium mb-3">Import from Excel</div>
+        <ImportForm onSuccess={async (message) => { await refresh(); setMsg(message); }} />
 
         <div className="h-px bg-border my-6" />
 
@@ -185,6 +190,80 @@ function ProjectForm({ onSuccess }: { onSuccess: () => Promise<void> | void }) {
         <Button onClick={submit} disabled={!id || !name || submitting}>Create</Button>
         {error && <span className="text-destructive text-xs">{error}</span>}
       </div>
+    </div>
+  );
+}
+
+function ImportForm({ onSuccess }: { onSuccess: (message: string) => Promise<void> | void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState<string>("");
+  const [info, setInfo] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setError("");
+    setInfo("");
+    const newFile = event.target.files?.[0] ?? null;
+    setFile(newFile);
+  };
+
+  const submit = async () => {
+    if (!file) {
+      setError("Select a file to import");
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/projects/import", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Import failed");
+      }
+      const summary = `Imported ${data?.stats?.projects ?? 0} projects (${data?.stats?.rows ?? 0} steps)`;
+      setInfo(summary);
+      setFile(null);
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
+      await onSuccess(summary);
+    } catch (e: any) {
+      setError(e?.message || "Failed to import file");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <div className="text-muted-foreground text-xs leading-5">
+        Upload a spreadsheet (`.xlsx` or `.csv`) with columns:
+        <span className="block mt-1 font-mono text-xs">
+          projectId, projectName, moduleId, moduleName, sectionId, sectionName, stepId, stepTitle, stepDescription
+        </span>
+      </div>
+      <label className="flex flex-col gap-2">
+        <span className="text-muted-foreground">Spreadsheet file</span>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx,.csv"
+          onChange={handleFileChange}
+          className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+        />
+      </label>
+      <div className="flex gap-2 items-center">
+        <Button onClick={submit} disabled={submitting || !file}>Import</Button>
+        {submitting && <span className="text-xs text-muted-foreground">Uploading…</span>}
+      </div>
+      {info && <div className="text-xs text-emerald-600">{info}</div>}
+      {error && <div className="text-xs text-destructive">{error}</div>}
     </div>
   );
 }
