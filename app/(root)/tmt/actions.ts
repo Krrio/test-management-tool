@@ -14,6 +14,17 @@ type UpdateStepArgs = {
   comment?: string;
 };
 
+type StoredStepRun = {
+  comment?: string;
+  jiraIssue?: {
+    key?: string;
+    id?: string;
+    url?: string;
+    createdAt?: string | Date;
+    createdBy?: string;
+  };
+};
+
 export async function updateStepStatus(args: UpdateStepArgs) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
@@ -37,13 +48,25 @@ export async function updateStepStatus(args: UpdateStepArgs) {
     { upsert: true, new: true }
   ).lean();
 
+  const steps = (run?.steps as Record<string, StoredStepRun>) ?? {};
+  const stepState = steps[stepId] ?? {};
+  const jiraIssue = stepState.jiraIssue
+    ? {
+        ...stepState.jiraIssue,
+        createdAt: stepState.jiraIssue.createdAt
+          ? new Date(stepState.jiraIssue.createdAt).toISOString()
+          : undefined,
+      }
+    : undefined;
+
   try {
     const pusher = getPusher();
     const channel = `private-section-${projectId}|${moduleId}|${sectionId}`;
     await pusher.trigger(channel, "step-updated", {
       stepId,
       status,
-      comment,
+      comment: typeof stepState.comment === "string" ? stepState.comment : comment,
+      jiraIssue,
       updatedBy: userId,
       updatedAt: now.toISOString(),
     });

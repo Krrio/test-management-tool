@@ -10,6 +10,13 @@ const StepRunSchema = new Schema(
     comment: { type: String },
     updatedBy: { type: String },
     updatedAt: { type: Date },
+    jiraIssue: {
+      key: { type: String },
+      id: { type: String },
+      url: { type: String },
+      createdAt: { type: Date },
+      createdBy: { type: String },
+    },
   },
   { _id: false }
 );
@@ -37,6 +44,13 @@ export type RunDocument = {
       comment?: string;
       updatedBy?: string;
       updatedAt?: Date;
+      jiraIssue?: {
+        key: string;
+        id?: string;
+        url?: string;
+        createdAt?: Date;
+        createdBy?: string;
+      };
     }
   >;
 };

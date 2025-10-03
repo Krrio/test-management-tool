@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog"
-import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash } from "lucide-react"
+import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash, ExternalLink, Loader2 } from "lucide-react"
 import Link from "next/link"
 
 
@@ -18,9 +18,34 @@ type TestStep = {
   description: string
 }
 
+type StepIssue = {
+  key: string
+  url?: string
+  id?: string
+  createdAt?: string
+  createdBy?: string
+}
+
 type StepRun = {
   status: StepStatus
   comment?: string
+  jiraIssue?: StepIssue
+}
+
+type RawStepRun = {
+  status?: StepStatus
+  comment?: unknown
+  jiraIssue?: (Partial<StepIssue> & { createdAt?: unknown }) | null
+}
+
+type CreateJiraResponse = {
+  stepRun?: {
+    status?: StepStatus
+    comment?: string
+    jiraIssue?: StepIssue
+  }
+  issue?: StepIssue
+  error?: string
 }
 
 type Section = {
@@ -76,6 +101,8 @@ export default function TestCaseLabPage() {
   const [dupBase, setDupBase] = useState<Module | null>(null)
   const [dupName, setDupName] = useState("")
   const [search, setSearch] = useState("")
+  const [creatingIssueFor, setCreatingIssueFor] = useState<string | null>(null)
+  const [jiraErrors, setJiraErrors] = useState<Record<string, string>>({})
 
   const project = useMemo(() => projects.find((p) => p.id === projectId), [projects, projectId])
   const module = useMemo(() => project?.modules.find((m) => m.id === moduleId), [project, moduleId])
@@ -99,8 +126,19 @@ export default function TestCaseLabPage() {
     return runs[sKey]?.[stepId]?.comment ?? ""
   }
 
+  const getStepIssue = (sKey: SectionRunKey | undefined, stepId: string): StepIssue | undefined => {
+    if (!sKey) return undefined
+    return runs[sKey]?.[stepId]?.jiraIssue
+  }
+
   const setStepStatus = async (sKey: SectionRunKey | undefined, stepId: string, status: StepStatus, comment?: string) => {
     if (!sKey || !project || !module || !section) return
+    setJiraErrors((prev) => {
+      if (!prev[stepId]) return prev
+      const next = { ...prev }
+      delete next[stepId]
+      return next
+    })
     // optimistic update
     setRuns((prev) => ({
       ...prev,
@@ -136,6 +174,68 @@ export default function TestCaseLabPage() {
     if (!sKey) return
     const currentStatus = getStepStatus(sKey, stepId) || "blocked"
     setStepStatus(sKey, stepId, currentStatus, comment)
+  }
+
+  const createJiraTask = async (step: TestStep) => {
+    if (!project || !module || !section || !sectionKey) return
+    const key = getSectionKey(project.id, module.id, section.id)
+    setCreatingIssueFor(step.id)
+    setJiraErrors((prev) => {
+      const next = { ...prev }
+      delete next[step.id]
+      return next
+    })
+    try {
+      const res = await fetch('/api/jira/issues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: project.id,
+          moduleId: module.id,
+          sectionId: section.id,
+          stepId: step.id,
+          comment: getStepComment(sectionKey, step.id) || undefined,
+        }),
+      })
+      let payload: unknown = null
+      try {
+        payload = await res.json()
+      } catch {}
+      const data = (payload ?? null) as CreateJiraResponse | null
+      if (!res.ok) {
+        const message = data?.error
+          ? String(data.error)
+          : 'Failed to create Jira issue'
+        setJiraErrors((prev) => ({ ...prev, [step.id]: message }))
+        return
+      }
+      setRuns((prev) => {
+        const prevSection = prev[key] ?? {}
+        const prevStep = prevSection[step.id]
+        const nextStatus = data?.stepRun?.status ?? prevStep?.status ?? 'failed'
+        return {
+          ...prev,
+          [key]: {
+            ...prevSection,
+            [step.id]: {
+              ...(prevStep ?? { status: nextStatus }),
+              status: nextStatus,
+              comment:
+                typeof data?.stepRun?.comment === 'string'
+                  ? data.stepRun.comment
+                  : prevStep?.comment,
+              jiraIssue:
+                data?.stepRun?.jiraIssue ?? prevStep?.jiraIssue,
+            },
+          },
+        }
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create Jira issue'
+      setJiraErrors((prev) => ({ ...prev, [step.id]: message }))
+    } finally {
+      setCreatingIssueFor(null)
+    }
   }
 
   const computeSectionStatus = (sec: Section): StepStatus => {
@@ -519,8 +619,26 @@ export default function TestCaseLabPage() {
         const res = await fetch(`/api/runs?${params.toString()}`)
         const data = await res.json()
         const key = getSectionKey(project.id, module.id, section.id)
-        const stepsObj = (data?.run?.steps ?? {}) as Record<string, StepRun>
-        setRuns((prev) => ({ ...prev, [key]: stepsObj }))
+        const rawSteps = (data?.run?.steps ?? {}) as Record<string, RawStepRun>
+        const normalized: Record<string, StepRun> = {}
+        for (const [id, value] of Object.entries(rawSteps)) {
+          normalized[id] = {
+            status: value?.status ?? 'untested',
+            comment: typeof value?.comment === 'string' ? value.comment : undefined,
+            jiraIssue: value?.jiraIssue
+              ? {
+                  ...value.jiraIssue,
+                  createdAt:
+                    typeof value.jiraIssue.createdAt === 'string'
+                      ? value.jiraIssue.createdAt
+                      : value.jiraIssue.createdAt instanceof Date
+                        ? value.jiraIssue.createdAt.toISOString()
+                        : undefined,
+                }
+              : undefined,
+          }
+        }
+        setRuns((prev) => ({ ...prev, [key]: normalized }))
       } finally {
         setLoadingRun(false)
       }
@@ -539,7 +657,7 @@ export default function TestCaseLabPage() {
         const pusher = getPusherClient()
         const name = `private-section-${project.id}|${module.id}|${section.id}`
         channel = pusher.subscribe(name)
-        channel.bind('step-updated', (evt: { stepId: string; status: StepStatus; comment?: string }) => {
+        channel.bind('step-updated', (evt: { stepId: string; status: StepStatus; comment?: string; jiraIssue?: StepIssue }) => {
           const key = getSectionKey(project.id, module.id, section.id)
           setRuns((prev) => ({
             ...prev,
@@ -549,6 +667,7 @@ export default function TestCaseLabPage() {
                 ...(prev[key]?.[evt.stepId] ?? { status: 'untested' }),
                 status: evt.status,
                 comment: evt.comment ?? prev[key]?.[evt.stepId]?.comment,
+                jiraIssue: evt.jiraIssue ?? prev[key]?.[evt.stepId]?.jiraIssue,
               },
             },
           }))
@@ -589,7 +708,7 @@ export default function TestCaseLabPage() {
         chan.bind('structure-updated', () => {
           refreshProjectsPreserve()
         })
-        chan.bind('step-updated', (evt: { projectId: string; moduleId: string; sectionId: string; stepId: string; status: StepStatus; comment?: string }) => {
+        chan.bind('step-updated', (evt: { projectId: string; moduleId: string; sectionId: string; stepId: string; status: StepStatus; comment?: string; jiraIssue?: StepIssue }) => {
           if (!project || evt.projectId !== project.id) return
           const key = getSectionKey(evt.projectId, evt.moduleId, evt.sectionId)
           setRuns((prev) => ({
@@ -600,6 +719,7 @@ export default function TestCaseLabPage() {
                 ...(prev[key]?.[evt.stepId] ?? { status: 'untested' }),
                 status: evt.status,
                 comment: evt.comment ?? prev[key]?.[evt.stepId]?.comment,
+                jiraIssue: evt.jiraIssue ?? prev[key]?.[evt.stepId]?.jiraIssue,
               },
             },
           }))
@@ -806,6 +926,8 @@ export default function TestCaseLabPage() {
                 )}
                 {(q ? sortedSteps(section).filter((st) => st.title.toLowerCase().includes(q) || st.description.toLowerCase().includes(q)) : sortedSteps(section)).map((step, idx) => {
                   const s = getStepStatus(sectionKey, step.id)
+                  const issue = getStepIssue(sectionKey, step.id)
+                  const issueCreatedAt = issue?.createdAt ? new Date(issue.createdAt).toLocaleString() : undefined
                   const displayNum = stepSort === "asc" ? idx + 1 : section.steps.length - idx
                   return (
                     <div key={step.id} className="group relative rounded-md border p-4">
@@ -870,6 +992,51 @@ export default function TestCaseLabPage() {
                                 <span className="text-muted-foreground italic">Double‑click to add a comment…</span>
                               )}
                             </div>
+                          )}
+                        </div>
+                      )}
+                      {(s === "failed" || issue) && (
+                        <div className="mt-3 flex flex-col gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                          {issue ? (
+                            <div className="flex flex-wrap items-center gap-2 text-sm">
+                              <span className="font-medium text-destructive">Jira issue:</span>
+                              <Button variant="link" size="sm" className="px-0" asChild>
+                                <Link
+                                  href={issue.url ?? '#'}
+                                  target={issue.url ? '_blank' : undefined}
+                                  rel={issue.url ? 'noreferrer' : undefined}
+                                  className="flex items-center gap-1"
+                                >
+                                  {issue.key}
+                                  <ExternalLink className="size-3.5" />
+                                </Link>
+                              </Button>
+                              {issueCreatedAt && (
+                                <span className="text-xs text-muted-foreground">Created {issueCreatedAt}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="text-sm text-muted-foreground">Escalate this failure to Jira.</div>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => createJiraTask(step)}
+                                disabled={creatingIssueFor === step.id}
+                              >
+                                {creatingIssueFor === step.id ? (
+                                  <>
+                                    <Loader2 className="size-4 animate-spin" />
+                                    Creating issue…
+                                  </>
+                                ) : (
+                                  'Create Jira task'
+                                )}
+                              </Button>
+                            </div>
+                          )}
+                          {jiraErrors[step.id] && (
+                            <div className="text-xs text-destructive">{jiraErrors[step.id]}</div>
                           )}
                         </div>
                       )}
