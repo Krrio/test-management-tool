@@ -276,22 +276,67 @@ export default function TestCaseLabPage() {
     setSectionId(firstSection?.id ?? "")
   }
 
-  // Module progress (passed steps vs total)
+  // Module progress breakdown by status so the top bar can reflect multiple states
   const moduleProgress = useMemo(() => {
     const mod = module
-    if (!project || !mod) return { passed: 0, total: 0, pct: 0 }
-    let passed = 0
-    let total = 0
-    for (const sec of mod.sections) {
-      total += sec.steps.length
-      const key = getSectionKey(project.id, mod.id, sec.id)
-      for (const st of sec.steps) {
-        if (getStepStatus(key as SectionRunKey, st.id) === "passed") passed += 1
+    if (!project || !mod) {
+      return {
+        total: 0,
+        counts: { passed: 0, failed: 0, blocked: 0, untested: 0 },
+        percentages: { passed: 0, failed: 0, blocked: 0, untested: 0 },
       }
     }
-    const pct = total === 0 ? 0 : Math.round((passed / total) * 100)
-    return { passed, total, pct }
+
+    let total = 0
+    const counts: Record<StepStatus | "untested", number> = {
+      passed: 0,
+      failed: 0,
+      blocked: 0,
+      untested: 0,
+    }
+
+    for (const sec of mod.sections) {
+      const key = getSectionKey(project.id, mod.id, sec.id)
+      for (const st of sec.steps) {
+        total += 1
+        const status = getStepStatus(key as SectionRunKey, st.id)
+        if (status in counts) {
+          counts[status] += 1
+        } else {
+          counts.untested += 1
+        }
+      }
+    }
+
+    const percentages = Object.fromEntries(
+      (Object.keys(counts) as Array<keyof typeof counts>).map((status) => [
+        status,
+        total === 0 ? 0 : Number(((counts[status] / total) * 100).toFixed(2)),
+      ]),
+    ) as { passed: number; failed: number; blocked: number; untested: number }
+
+    return { total, counts, percentages }
   }, [project, module, runs])
+
+  const progressSegments = useMemo(() => {
+    const config = [
+      { key: "passed", label: "Passed", className: "bg-primary" },
+      { key: "failed", label: "Failed", className: "bg-destructive" },
+      { key: "blocked", label: "Blocked", className: "bg-amber-500" },
+      { key: "untested", label: "Untested", className: "bg-muted" },
+    ] as const
+
+    return config.map((entry) => ({
+      ...entry,
+      count: moduleProgress.counts[entry.key],
+      pct: moduleProgress.percentages[entry.key],
+    }))
+  }, [moduleProgress])
+
+  const activeProgressSegments = useMemo(
+    () => progressSegments.filter((segment) => segment.pct > 0),
+    [progressSegments],
+  )
 
   const sortedSteps = (sec: Section) => {
     const arr = [...sec.steps]
@@ -826,22 +871,40 @@ export default function TestCaseLabPage() {
             <HoverCard>
               <HoverCardTrigger asChild>
                 <div
-                  className="absolute left-0 right-0 top-0 h-1.5 rounded-t-lg bg-input/60"
+                  className="absolute left-0 right-0 top-0 flex h-1.5 rounded-t-lg bg-input/60 overflow-hidden"
                   role="progressbar"
                   aria-valuemin={0}
                   aria-valuemax={moduleProgress.total}
-                  aria-valuenow={moduleProgress.passed}
-                  title={`${moduleProgress.passed}/${moduleProgress.total}`}
+                  aria-valuenow={moduleProgress.total - moduleProgress.counts.untested}
+                  aria-valuetext={progressSegments
+                    .map((segment) => `${segment.label} ${segment.count}`)
+                    .join(", ")}
+                  title={progressSegments
+                    .map((segment) => `${segment.label}: ${segment.count}`)
+                    .join(" | ")}
                 >
-                  <div
-                    className="h-full rounded-t-lg bg-primary transition-all"
-                    style={{ width: `${moduleProgress.pct}%` }}
-                  />
+                  {activeProgressSegments.length > 0 &&
+                    activeProgressSegments.map((segment, index) => (
+                      <div
+                        key={segment.key}
+                        className={`h-full transition-all ${segment.className} ${index === 0 ? "rounded-tl-lg" : ""} ${index === activeProgressSegments.length - 1 ? "rounded-tr-lg" : ""}`}
+                        style={{ width: `${segment.pct}%` }}
+                      />
+                    ))}
                 </div>
               </HoverCardTrigger>
-              <HoverCardContent className="text-xs w-auto py-1 px-2">
+              <HoverCardContent className="text-xs w-auto py-2 px-3 space-y-1">
                 <div className="font-medium">Progress</div>
-                <div>{moduleProgress.passed} / {moduleProgress.total} ({moduleProgress.pct}%)</div>
+                {progressSegments.map((segment) => (
+                  <div key={segment.key} className="flex items-center justify-between gap-4 whitespace-nowrap">
+                    <span className="text-muted-foreground">{segment.label}</span>
+                    <span>{segment.count}{moduleProgress.total > 0 ? ` (${Math.round(segment.pct)}%)` : ""}</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between gap-4 pt-1 text-muted-foreground">
+                  <span>Total</span>
+                  <span>{moduleProgress.total}</span>
+                </div>
               </HoverCardContent>
             </HoverCard>
             <div className="border-b px-4 py-3 text-sm font-medium">Sections</div>
