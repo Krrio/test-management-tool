@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db";
 import { Run } from "@/models/Run";
 import { auth } from "@clerk/nextjs/server";
 import { getPusher } from "@/lib/pusher-server";
+import { ensureOrganizationAccess } from "@/lib/organizations";
 
 type StepStatus = "untested" | "passed" | "failed" | "blocked";
 
@@ -18,6 +19,7 @@ type StoredStepRun = {
 };
 
 type UpdatePayload = {
+  organizationId?: string;
   projectId?: string;
   moduleId?: string;
   sectionId?: string;
@@ -31,13 +33,17 @@ export async function GET(req: NextRequest) {
   if (!userId) return new NextResponse("Unauthorized", { status: 401 });
   await connectDB();
   const { searchParams } = new URL(req.url);
+  const organizationId = searchParams.get("organizationId");
   const projectId = searchParams.get("projectId");
   const moduleId = searchParams.get("moduleId");
   const sectionId = searchParams.get("sectionId");
-  if (!projectId || !moduleId || !sectionId) {
+  if (!organizationId || !projectId || !moduleId || !sectionId) {
     return NextResponse.json({ error: "Missing identifiers" }, { status: 400 });
   }
-  const run = await Run.findOne({ projectId, moduleId, sectionId }).lean();
+  const membership = await ensureOrganizationAccess(userId, organizationId);
+  if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const run = await Run.findOne({ organizationId, projectId, moduleId, sectionId }).lean();
   return NextResponse.json({ run: run ?? null });
 }
 
@@ -53,13 +59,16 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { projectId, moduleId, sectionId, stepId, status, comment } = body || {};
-  if (!projectId || !moduleId || !sectionId || !stepId || !status) {
+  const { organizationId, projectId, moduleId, sectionId, stepId, status, comment } = body || {};
+  if (!organizationId || !projectId || !moduleId || !sectionId || !stepId || !status) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
   if (!["untested", "passed", "failed", "blocked"].includes(status)) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
+
+  const membership = await ensureOrganizationAccess(userId, organizationId);
+  if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const now = new Date();
   const update = {
@@ -74,9 +83,9 @@ export async function PATCH(req: NextRequest) {
   } as const;
 
   const run = await Run.findOneAndUpdate(
-    { projectId, moduleId, sectionId },
+    { organizationId, projectId, moduleId, sectionId },
     update,
-    { upsert: true, new: true }
+    { upsert: true, new: true, setDefaultsOnInsert: true }
   ).lean();
 
   const steps = (run?.steps as Record<string, StoredStepRun>) ?? {};
@@ -92,7 +101,7 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const pusher = getPusher();
-    const channel = `private-section-${projectId}|${moduleId}|${sectionId}`;
+    const channel = `private-section-${organizationId}|${projectId}|${moduleId}|${sectionId}`;
     await pusher.trigger(channel, "step-updated", {
       stepId,
       status,
@@ -102,7 +111,8 @@ export async function PATCH(req: NextRequest) {
       updatedAt: now.toISOString(),
     });
     // Also broadcast globally so other sections lists can update without subscribing to each section
-    await pusher.trigger("presence-tmt", "step-updated", {
+    await pusher.trigger(`presence-tmt-${organizationId}`, "step-updated", {
+      organizationId,
       projectId,
       moduleId,
       sectionId,
@@ -113,7 +123,7 @@ export async function PATCH(req: NextRequest) {
       updatedBy: userId,
       updatedAt: now.toISOString(),
     });
-  } catch (e) {
+  } catch {
     // ignore broadcast errors in skeleton
   }
 

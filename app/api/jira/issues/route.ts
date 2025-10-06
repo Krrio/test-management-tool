@@ -6,6 +6,7 @@ import { Project } from "@/models/Project";
 import { Run } from "@/models/Run";
 import { buildDescriptionDoc, createJiraIssue, makeParagraph, JiraDocNode, JiraIssue } from "@/lib/jira";
 import { getPusher } from "@/lib/pusher-server";
+import { ensureOrganizationAccess } from "@/lib/organizations";
 
 const heading = (text: string): JiraDocNode => ({
   type: "heading",
@@ -30,6 +31,7 @@ type StoredStepRun = {
 };
 
 type CreateIssueBody = {
+  organizationId?: string;
   projectId?: string;
   moduleId?: string;
   sectionId?: string;
@@ -48,14 +50,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { projectId, moduleId, sectionId, stepId, comment } = body || {};
-  if (!projectId || !moduleId || !sectionId || !stepId) {
+  const { organizationId, projectId, moduleId, sectionId, stepId, comment } = body || {};
+  if (!organizationId || !projectId || !moduleId || !sectionId || !stepId) {
     return NextResponse.json({ error: "Missing identifiers" }, { status: 400 });
   }
 
   await connectDB();
 
-  const project = await Project.findOne({ _id: projectId }).lean();
+  const membership = await ensureOrganizationAccess(userId, organizationId);
+  if (!membership) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const project = await Project.findOne({ _id: projectId, organizationId }).lean();
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
@@ -116,13 +123,13 @@ export async function POST(req: NextRequest) {
   };
 
   const run = await Run.findOneAndUpdate(
-    { projectId, moduleId, sectionId },
+    { organizationId, projectId, moduleId, sectionId },
     {
       $set: {
         [`steps.${stepId}.jiraIssue`]: jiraIssueDetails,
       },
     },
-    { upsert: true, new: true }
+    { upsert: true, new: true, setDefaultsOnInsert: true }
   ).lean();
 
   const steps = (run?.steps as Record<string, StoredStepRun>) ?? {};
@@ -147,9 +154,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const pusher = getPusher();
-    const channel = `private-section-${projectId}|${moduleId}|${sectionId}`;
+    const channel = `private-section-${organizationId}|${projectId}|${moduleId}|${sectionId}`;
     await pusher.trigger(channel, "step-updated", payload);
-    await pusher.trigger("presence-tmt", "step-updated", {
+    await pusher.trigger(`presence-tmt-${organizationId}`, "step-updated", {
+      organizationId,
       projectId,
       moduleId,
       sectionId,

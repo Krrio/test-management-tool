@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { addModule, addSection, addStep, createProject } from "./actions";
@@ -10,8 +10,41 @@ type Step = { id: string; title: string; description: string };
 type Section = { id: string; name: string; steps: Step[] };
 type Module = { id: string; name: string; sections: Section[] };
 type Project = { id: string; name: string; modules: Module[] };
+type Organization = { id: string; name: string; role: "owner" | "admin" | "member" };
+type ApiProject = {
+  _id: string;
+  name: string;
+  modules?: Array<{
+    _id: string;
+    name: string;
+    sections?: Array<{
+      _id: string;
+      name: string;
+      steps?: Array<{ _id: string; title: string; description: string }>;
+    }>;
+  }>;
+};
+
+const mapApiProjects = (items: ApiProject[]): Project[] =>
+  items.map((p) => ({
+    id: p._id,
+    name: p.name,
+    modules: (p.modules ?? []).map((m) => ({
+      id: m._id,
+      name: m.name,
+      sections: (m.sections ?? []).map((s) => ({
+        id: s._id,
+        name: s.name,
+        steps: (s.steps ?? []).map((st) => ({ id: st._id, title: st.title, description: st.description })),
+      })),
+    })),
+  }));
 
 export default function AdminPage() {
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [organizationId, setOrganizationId] = useState("");
+  const [loadingOrganizations, setLoadingOrganizations] = useState(true);
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string>("");
@@ -23,21 +56,95 @@ export default function AdminPage() {
   const moduleOptions = useMemo(() => (projects.find(p => p.id === projectId)?.modules ?? []), [projects, projectId]);
   const sectionOptions = useMemo(() => (moduleOptions.find(m => m.id === moduleId)?.sections ?? []), [moduleOptions, moduleId]);
 
-  const refresh = async () => {
+  const activeOrganization = useMemo(
+    () => organizations.find((org) => org.id === organizationId),
+    [organizations, organizationId],
+  );
+  const canManage = activeOrganization?.role === "owner" || activeOrganization?.role === "admin";
+
+  const loadOrganizations = useCallback(async () => {
+    setLoadingOrganizations(true);
+    try {
+      const res = await fetch('/api/organizations');
+      const data = await res.json();
+      const list = (data?.organizations ?? []) as Organization[];
+      setOrganizations(list);
+      setOrganizationId((prev) => {
+        if (prev && list.some((org) => org.id === prev)) return prev;
+        return list[0]?.id ?? "";
+      });
+    } catch {
+      setOrganizations([]);
+      setOrganizationId("");
+    } finally {
+      setLoadingOrganizations(false);
+    }
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (!organizationId) {
+      setProjects([]);
+      setProjectId("");
+      setModuleId("");
+      setSectionId("");
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch('/api/projects');
+      const params = new URLSearchParams({ organizationId });
+      const res = await fetch(`/api/projects?${params.toString()}`);
       const data = await res.json();
-      const list = (data?.projects ?? []) as Array<any>;
-      setProjects(list.map((p) => ({ id: p._id, name: p.name, modules: p.modules?.map((m: any) => ({ id: m._id, name: m.name, sections: m.sections?.map((s: any) => ({ id: s._id, name: s.name, steps: s.steps?.map((st: any) => ({ id: st._id, title: st.title, description: st.description })) || [] })) || [] })) || [] })));
-    } catch (e: any) {
-      setMsg(e?.message || 'Failed to load projects');
+      const raw = Array.isArray(data?.projects) ? (data.projects as ApiProject[]) : [];
+      setProjects(mapApiProjects(raw));
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : 'Failed to load projects');
     } finally {
       setLoading(false);
     }
-  };
+  }, [organizationId]);
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { loadOrganizations(); }, [loadOrganizations]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    if (!projects.length) {
+      setProjectId("");
+      setModuleId("");
+      setSectionId("");
+      return;
+    }
+
+    const currentProject = projects.find((p) => p.id === projectId) ?? projects[0];
+    if (currentProject.id !== projectId) {
+      setProjectId(currentProject.id);
+      setModuleId(currentProject.modules[0]?.id ?? "");
+      setSectionId(currentProject.modules[0]?.sections[0]?.id ?? "");
+      return;
+    }
+
+    if (!currentProject.modules.length) {
+      setModuleId("");
+      setSectionId("");
+      return;
+    }
+
+    const currentModule = currentProject.modules.find((m) => m.id === moduleId) ?? currentProject.modules[0];
+    if (currentModule.id !== moduleId) {
+      setModuleId(currentModule.id);
+      setSectionId(currentModule.sections[0]?.id ?? "");
+      return;
+    }
+
+    if (!currentModule.sections.length) {
+      setSectionId("");
+      return;
+    }
+
+    if (!currentModule.sections.some((s) => s.id === sectionId)) {
+      setSectionId(currentModule.sections[0].id);
+    }
+  }, [projects, projectId, moduleId, sectionId]);
 
   return (
     <div className="h-screen w-full p-4 flex flex-col gap-4 overflow-hidden">
@@ -48,15 +155,44 @@ export default function AdminPage() {
           Back to TMT
         </a>
       </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Select value={organizationId} onValueChange={setOrganizationId}>
+          <SelectTrigger className="min-w-[220px]">
+            <SelectValue placeholder="Select organization" />
+          </SelectTrigger>
+          <SelectContent>
+            {organizations.map((org) => (
+              <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {!loadingOrganizations && !organizations.length && (
+          <span className="text-xs text-muted-foreground">No organizations yet. Create one from the main TMT view.</span>
+        )}
+        {activeOrganization && !canManage && (
+          <span className="text-xs text-muted-foreground">You have read-only access.</span>
+        )}
+      </div>
       <div className="flex gap-6 flex-1 min-h-0">
         <div className="w-1/2 min-w-0 rounded-lg border h-full p-4 overflow-y-auto">
         <div className="font-medium mb-3">Create Project</div>
-        <ProjectForm onSuccess={async () => { await refresh(); setMsg('Project created'); }} />
+        {loading && organizationId && (
+          <div className="mb-2 text-xs text-muted-foreground">Loading projects…</div>
+        )}
+        <ProjectForm
+          organizationId={organizationId}
+          canManage={!!canManage}
+          onSuccess={async () => { await refresh(); setMsg('Project created'); }}
+        />
 
         <div className="h-px bg-border my-6" />
 
         <div className="font-medium mb-3">Import from Excel</div>
-        <ImportForm onSuccess={async (message) => { await refresh(); setMsg(message); }} />
+        <ImportForm
+          organizationId={organizationId}
+          canManage={!!canManage}
+          onSuccess={async (message) => { await refresh(); setMsg(message); }}
+        />
 
         <div className="h-px bg-border my-6" />
 
@@ -73,7 +209,12 @@ export default function AdminPage() {
             </SelectContent>
           </Select>
         </div>
-        <ModuleForm projectId={projectId} onSuccess={async () => { await refresh(); setMsg('Module added'); }} />
+        <ModuleForm
+          organizationId={organizationId}
+          canManage={!!canManage}
+          projectId={projectId}
+          onSuccess={async () => { await refresh(); setMsg('Module added'); }}
+        />
 
         <div className="h-px bg-border my-6" />
 
@@ -100,7 +241,13 @@ export default function AdminPage() {
             </SelectContent>
           </Select>
         </div>
-        <SectionForm projectId={projectId} moduleId={moduleId} onSuccess={async () => { await refresh(); setMsg('Section added'); }} />
+        <SectionForm
+          organizationId={organizationId}
+          canManage={!!canManage}
+          projectId={projectId}
+          moduleId={moduleId}
+          onSuccess={async () => { await refresh(); setMsg('Section added'); }}
+        />
       </div>
 
       <div className="w-1/2 min-w-0 rounded-lg border h-full p-4 overflow-y-auto">
@@ -137,7 +284,14 @@ export default function AdminPage() {
             </SelectContent>
           </Select>
         </div>
-        <StepForm projectId={projectId} moduleId={moduleId} sectionId={sectionId} onSuccess={async () => { await refresh(); setMsg('Step added'); }} />
+        <StepForm
+          organizationId={organizationId}
+          canManage={!!canManage}
+          projectId={projectId}
+          moduleId={moduleId}
+          sectionId={sectionId}
+          onSuccess={async () => { await refresh(); setMsg('Step added'); }}
+        />
 
         {msg && (
           <div className="mt-6 text-xs text-muted-foreground">{msg}</div>
@@ -158,43 +312,61 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] ${props.className ?? ''}`} />
+  return (
+    <input
+      {...props}
+      className={`rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:opacity-60 disabled:cursor-not-allowed ${props.className ?? ''}`}
+    />
+  )
 }
 
 function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={`rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] ${props.className ?? ''}`} />
+  return (
+    <textarea
+      {...props}
+      className={`rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:opacity-60 disabled:cursor-not-allowed ${props.className ?? ''}`}
+    />
+  )
 }
 
-function ProjectForm({ onSuccess }: { onSuccess: () => Promise<void> | void }) {
+function ProjectForm({ organizationId, canManage, onSuccess }: { organizationId: string; canManage: boolean; onSuccess: () => Promise<void> | void }) {
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const submit = async () => {
+    if (!canManage) {
+      setError("You do not have permission to manage projects");
+      return;
+    }
+    if (!organizationId) {
+      setError("Select an organization first");
+      return;
+    }
     setSubmitting(true); setError("");
     try {
-      await createProject({ id, name });
+      await createProject({ id, name, organizationId });
       setId(""); setName("");
       await onSuccess();
-    } catch (e: any) {
-      setError(e?.message || 'Failed');
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'Failed');
     } finally {
       setSubmitting(false);
     }
   };
   return (
     <div className="flex flex-col gap-2">
-      <Field label="Project ID (slug)"><Input value={id} onChange={e => setId(e.target.value)} placeholder="mwo" /></Field>
-      <Field label="Project Name"><Input value={name} onChange={e => setName(e.target.value)} placeholder="MWO" /></Field>
+      <Field label="Project ID (slug)"><Input value={id} onChange={e => setId(e.target.value)} placeholder="mwo" disabled={!canManage} /></Field>
+      <Field label="Project Name"><Input value={name} onChange={e => setName(e.target.value)} placeholder="MWO" disabled={!canManage} /></Field>
       <div className="flex gap-2">
-        <Button onClick={submit} disabled={!id || !name || submitting}>Create</Button>
+        <Button onClick={submit} disabled={!canManage || !id || !name || submitting}>Create</Button>
         {error && <span className="text-destructive text-xs">{error}</span>}
       </div>
     </div>
   );
 }
 
-function ImportForm({ onSuccess }: { onSuccess: (message: string) => Promise<void> | void }) {
+function ImportForm({ organizationId, canManage, onSuccess }: { organizationId: string; canManage: boolean; onSuccess: (message: string) => Promise<void> | void }) {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string>("");
   const [info, setInfo] = useState<string>("");
@@ -209,15 +381,15 @@ function ImportForm({ onSuccess }: { onSuccess: (message: string) => Promise<voi
   };
 
   const submit = async () => {
-    if (!file) {
-      setError("Select a file to import");
-      return;
-    }
+    if (!canManage) { setError("You do not have permission"); return; }
+    if (!organizationId) { setError("Select organization"); return; }
+    if (!file) { setError("Select a file to import"); return; }
     setSubmitting(true);
     setError("");
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("organizationId", organizationId);
       const res = await fetch("/api/projects/import", {
         method: "POST",
         body: formData,
@@ -233,8 +405,8 @@ function ImportForm({ onSuccess }: { onSuccess: (message: string) => Promise<voi
         inputRef.current.value = "";
       }
       await onSuccess(summary);
-    } catch (e: any) {
-      setError(e?.message || "Failed to import file");
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "Failed to import file");
     } finally {
       setSubmitting(false);
     }
@@ -255,11 +427,12 @@ function ImportForm({ onSuccess }: { onSuccess: (message: string) => Promise<voi
           type="file"
           accept=".xlsx,.csv"
           onChange={handleFileChange}
-          className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+          disabled={!canManage}
+          className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50"
         />
       </label>
       <div className="flex gap-2 items-center">
-        <Button onClick={submit} disabled={submitting || !file}>Import</Button>
+        <Button onClick={submit} disabled={submitting || !file || !canManage}>Import</Button>
         {submitting && <span className="text-xs text-muted-foreground">Uploading…</span>}
       </div>
       {info && <div className="text-xs text-emerald-600">{info}</div>}
@@ -268,89 +441,98 @@ function ImportForm({ onSuccess }: { onSuccess: (message: string) => Promise<voi
   );
 }
 
-function ModuleForm({ projectId, onSuccess }: { projectId: string; onSuccess: () => Promise<void> | void }) {
+function ModuleForm({ organizationId, projectId, canManage, onSuccess }: { organizationId: string; projectId: string; canManage: boolean; onSuccess: () => Promise<void> | void }) {
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const submit = async () => {
+    if (!canManage) { setError('You do not have permission'); return; }
+    if (!organizationId) { setError('Select organization'); return; }
+    if (!projectId) { setError('Select project'); return; }
     setSubmitting(true); setError("");
     try {
-      await addModule({ projectId, id, name });
+      await addModule({ organizationId, projectId, id, name });
       setId(""); setName("");
       await onSuccess();
-    } catch (e: any) {
-      setError(e?.message || 'Failed');
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'Failed');
     } finally {
       setSubmitting(false);
     }
   };
   return (
     <div className="flex flex-col gap-2">
-      <Field label="Module ID (slug)"><Input value={id} onChange={e => setId(e.target.value)} placeholder="monetization" /></Field>
-      <Field label="Module Name"><Input value={name} onChange={e => setName(e.target.value)} placeholder="Monetization" /></Field>
+      <Field label="Module ID (slug)"><Input value={id} onChange={e => setId(e.target.value)} placeholder="monetization" disabled={!canManage || !projectId} /></Field>
+      <Field label="Module Name"><Input value={name} onChange={e => setName(e.target.value)} placeholder="Monetization" disabled={!canManage || !projectId} /></Field>
       <div className="flex gap-2">
-        <Button onClick={submit} disabled={!projectId || !id || !name || submitting}>Add Module</Button>
+        <Button onClick={submit} disabled={!canManage || !projectId || !id || !name || submitting}>Add Module</Button>
         {error && <span className="text-destructive text-xs">{error}</span>}
       </div>
     </div>
   );
 }
 
-function SectionForm({ projectId, moduleId, onSuccess }: { projectId: string; moduleId: string; onSuccess: () => Promise<void> | void }) {
+function SectionForm({ organizationId, projectId, moduleId, canManage, onSuccess }: { organizationId: string; projectId: string; moduleId: string; canManage: boolean; onSuccess: () => Promise<void> | void }) {
   const [id, setId] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const submit = async () => {
+    if (!canManage) { setError('You do not have permission'); return; }
+    if (!organizationId) { setError('Select organization'); return; }
+    if (!projectId || !moduleId) { setError('Select project and module'); return; }
     setSubmitting(true); setError("");
     try {
-      await addSection({ projectId, moduleId, id, name });
+      await addSection({ organizationId, projectId, moduleId, id, name });
       setId(""); setName("");
       await onSuccess();
-    } catch (e: any) {
-      setError(e?.message || 'Failed');
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'Failed');
     } finally {
       setSubmitting(false);
     }
   };
   return (
     <div className="flex flex-col gap-2">
-      <Field label="Section ID (slug)"><Input value={id} onChange={e => setId(e.target.value)} placeholder="so" /></Field>
-      <Field label="Section Name"><Input value={name} onChange={e => setName(e.target.value)} placeholder="SO" /></Field>
+      <Field label="Section ID (slug)"><Input value={id} onChange={e => setId(e.target.value)} placeholder="so" disabled={!canManage || !projectId || !moduleId} /></Field>
+      <Field label="Section Name"><Input value={name} onChange={e => setName(e.target.value)} placeholder="SO" disabled={!canManage || !projectId || !moduleId} /></Field>
       <div className="flex gap-2">
-        <Button onClick={submit} disabled={!projectId || !moduleId || !id || !name || submitting}>Add Section</Button>
+        <Button onClick={submit} disabled={!canManage || !projectId || !moduleId || !id || !name || submitting}>Add Section</Button>
         {error && <span className="text-destructive text-xs">{error}</span>}
       </div>
     </div>
   );
 }
 
-function StepForm({ projectId, moduleId, sectionId, onSuccess }: { projectId: string; moduleId: string; sectionId: string; onSuccess: () => Promise<void> | void }) {
+function StepForm({ organizationId, projectId, moduleId, sectionId, canManage, onSuccess }: { organizationId: string; projectId: string; moduleId: string; sectionId: string; canManage: boolean; onSuccess: () => Promise<void> | void }) {
   const [id, setId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const submit = async () => {
+    if (!canManage) { setError('You do not have permission'); return; }
+    if (!organizationId) { setError('Select organization'); return; }
+    if (!projectId || !moduleId || !sectionId) { setError('Select project, module and section'); return; }
     setSubmitting(true); setError("");
     try {
-      await addStep({ projectId, moduleId, sectionId, id, title, description });
+      await addStep({ organizationId, projectId, moduleId, sectionId, id, title, description });
       setId(""); setTitle(""); setDescription("");
       await onSuccess();
-    } catch (e: any) {
-      setError(e?.message || 'Failed');
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'Failed');
     } finally {
       setSubmitting(false);
     }
   };
   return (
     <div className="flex flex-col gap-2">
-      <Field label="Step ID (slug)"><Input value={id} onChange={e => setId(e.target.value)} placeholder="so-1" /></Field>
-      <Field label="Title"><Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Open Store" /></Field>
-      <Field label="Description"><Textarea rows={4} value={description} onChange={e => setDescription(e.target.value)} placeholder="Open the store from the main menu" /></Field>
+      <Field label="Step ID (slug)"><Input value={id} onChange={e => setId(e.target.value)} placeholder="so-1" disabled={!canManage || !projectId || !moduleId || !sectionId} /></Field>
+      <Field label="Title"><Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Open Store" disabled={!canManage || !projectId || !moduleId || !sectionId} /></Field>
+      <Field label="Description"><Textarea rows={4} value={description} onChange={e => setDescription(e.target.value)} placeholder="Open the store from the main menu" disabled={!canManage || !projectId || !moduleId || !sectionId} /></Field>
       <div className="flex gap-2">
-        <Button onClick={submit} disabled={!projectId || !moduleId || !sectionId || !id || !title || !description || submitting}>Add Step</Button>
+        <Button onClick={submit} disabled={!canManage || !projectId || !moduleId || !sectionId || !id || !title || !description || submitting}>Add Step</Button>
         {error && <span className="text-destructive text-xs">{error}</span>}
       </div>
     </div>

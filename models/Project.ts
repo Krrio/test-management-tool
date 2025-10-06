@@ -30,6 +30,7 @@ const ModuleSchema = new Schema(
 const ProjectSchema = new Schema(
   {
     _id: { type: String, required: true },
+    organizationId: { type: String, required: true, index: true },
     name: { type: String, required: true },
     modules: { type: [ModuleSchema], default: [] },
   },
@@ -38,6 +39,7 @@ const ProjectSchema = new Schema(
 
 export type ProjectDocument = {
   _id: string;
+  organizationId: string;
   name: string;
   modules: Array<{
     _id: string;
@@ -55,4 +57,3 @@ export type ProjectDocument = {
 };
 
 export const Project = models.Project || model<ProjectDocument>("Project", ProjectSchema);
-

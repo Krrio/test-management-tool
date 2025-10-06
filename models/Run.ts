@@ -23,6 +23,7 @@ const StepRunSchema = new Schema(
 
 const RunSchema = new Schema(
   {
+    organizationId: { type: String, required: true, index: true },
     projectId: { type: String, required: true },
     moduleId: { type: String, required: true },
     sectionId: { type: String, required: true },
@@ -31,9 +32,10 @@ const RunSchema = new Schema(
   { timestamps: true }
 );
 
-RunSchema.index({ projectId: 1, moduleId: 1, sectionId: 1 }, { unique: true });
+RunSchema.index({ organizationId: 1, projectId: 1, moduleId: 1, sectionId: 1 }, { unique: true });
 
 export type RunDocument = {
+  organizationId: string;
   projectId: string;
   moduleId: string;
   sectionId: string;
@@ -56,4 +58,3 @@ export type RunDocument = {
 };
 
 export const Run = models.Run || model<RunDocument>("Run", RunSchema);
-

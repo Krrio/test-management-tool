@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
@@ -66,11 +66,66 @@ type Project = {
   modules: Module[]
 }
 
+type Organization = {
+  id: string
+  name: string
+  role: "owner" | "admin" | "member"
+}
+
+type ApiProject = {
+  _id: string
+  name: string
+  modules?: Array<{
+    _id: string
+    name: string
+    sections?: Array<{
+      _id: string
+      name: string
+      steps?: Array<{ _id: string; title: string; description: string }>
+    }>
+  }>
+}
+
+type PusherChannel = {
+  bind: (event: string, callback: (...args: unknown[]) => void) => void
+  unsubscribe: () => void
+  members?: { count?: number }
+}
+
+const mapApiProjects = (items: ApiProject[]): Project[] =>
+  items.map((p) => ({
+    id: p._id,
+    name: p.name,
+    modules: (p.modules ?? []).map((m) => ({
+      id: m._id,
+      name: m.name,
+      sections: (m.sections ?? []).map((s) => ({
+        id: s._id,
+        name: s.name,
+        steps: (s.steps ?? []).map((st) => ({ id: st._id, title: st.title, description: st.description })),
+      })),
+    })),
+  }))
+
 // Data now fetched from API
 
-type SectionRunKey = `${string}|${string}|${string}` // projectId|moduleId|sectionId
+type SectionRunKey = `${string}|${string}|${string}|${string}` // organizationId|projectId|moduleId|sectionId
 
 export default function TestCaseLabPage() {
+  const [organizations, setOrganizations] = useState<Organization[]>([])
+  const [organizationId, setOrganizationId] = useState<string>("")
+  const [loadingOrganizations, setLoadingOrganizations] = useState(true)
+  const activeOrganization = useMemo(
+    () => organizations.find((org) => org.id === organizationId),
+    [organizations, organizationId],
+  )
+
+  const [organizationFormOpen, setOrganizationFormOpen] = useState(false)
+  const [organizationFormId, setOrganizationFormId] = useState("")
+  const [organizationFormName, setOrganizationFormName] = useState("")
+  const [organizationFormError, setOrganizationFormError] = useState("")
+  const [organizationFormSubmitting, setOrganizationFormSubmitting] = useState(false)
+
   const [projects, setProjects] = useState<Project[]>([])
   const [projectId, setProjectId] = useState<string>("")
   const [moduleId, setModuleId] = useState<string>("")
@@ -103,17 +158,39 @@ export default function TestCaseLabPage() {
   const [search, setSearch] = useState("")
   const [creatingIssueFor, setCreatingIssueFor] = useState<string | null>(null)
   const [jiraErrors, setJiraErrors] = useState<Record<string, string>>({})
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteFeedback, setInviteFeedback] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+
+  const loadOrganizations = useCallback(async () => {
+    setLoadingOrganizations(true)
+    try {
+      const res = await fetch('/api/organizations')
+      const data = await res.json()
+      const list = (data?.organizations ?? []) as Organization[]
+      setOrganizations(list)
+      setOrganizationId((prev) => {
+        if (prev && list.some((org) => org.id === prev)) return prev
+        return list[0]?.id ?? ""
+      })
+    } catch {
+      setOrganizations([])
+      setOrganizationId("")
+    } finally {
+      setLoadingOrganizations(false)
+    }
+  }, [])
 
   const project = useMemo(() => projects.find((p) => p.id === projectId), [projects, projectId])
-  const module = useMemo(() => project?.modules.find((m) => m.id === moduleId), [project, moduleId])
-  const section = useMemo(() => module?.sections.find((s) => s.id === sectionId), [module, sectionId])
+  const activeModule = useMemo(() => project?.modules.find((m) => m.id === moduleId), [project, moduleId])
+  const activeSection = useMemo(() => activeModule?.sections.find((s) => s.id === sectionId), [activeModule, sectionId])
+
+  const getSectionKey = (oId: string, pId: string, mId: string, sId: string): SectionRunKey =>
+    `${oId}|${pId}|${mId}|${sId}`
 
   const sectionKey = useMemo<SectionRunKey | undefined>(() => {
-    if (!project || !module || !section) return undefined
-    return `${project.id}|${module.id}|${section.id}`
-  }, [project, module, section])
-
-  const getSectionKey = (pId: string, mId: string, sId: string): SectionRunKey => `${pId}|${mId}|${sId}`
+    if (!organizationId || !project || !activeModule || !activeSection) return undefined
+    return getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
+  }, [organizationId, project, activeModule, activeSection])
 
   const getStepStatus = (sKey: SectionRunKey | undefined, stepId: string): StepStatus => {
     if (!sKey) return "untested"
@@ -132,7 +209,7 @@ export default function TestCaseLabPage() {
   }
 
   const setStepStatus = async (sKey: SectionRunKey | undefined, stepId: string, status: StepStatus, comment?: string) => {
-    if (!sKey || !project || !module || !section) return
+    if (!sKey || !project || !activeModule || !activeSection || !organizationId) return
     setJiraErrors((prev) => {
       if (!prev[stepId]) return prev
       const next = { ...prev }
@@ -157,28 +234,23 @@ export default function TestCaseLabPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          organizationId,
           projectId: project.id,
-          moduleId: module.id,
-          sectionId: section.id,
+          moduleId: activeModule.id,
+          sectionId: activeSection.id,
           stepId,
           status,
           comment,
         }),
       })
-    } catch (e) {
+    } catch {
       // ignore errors in optimistic skeleton, could rollback here
     }
   }
 
-  const setStepComment = (sKey: SectionRunKey | undefined, stepId: string, comment: string) => {
-    if (!sKey) return
-    const currentStatus = getStepStatus(sKey, stepId) || "blocked"
-    setStepStatus(sKey, stepId, currentStatus, comment)
-  }
-
   const createJiraTask = async (step: TestStep) => {
-    if (!project || !module || !section || !sectionKey) return
-    const key = getSectionKey(project.id, module.id, section.id)
+    if (!organizationId || !project || !activeModule || !activeSection || !sectionKey) return
+    const key = getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
     setCreatingIssueFor(step.id)
     setJiraErrors((prev) => {
       const next = { ...prev }
@@ -190,9 +262,10 @@ export default function TestCaseLabPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          organizationId,
           projectId: project.id,
-          moduleId: module.id,
-          sectionId: section.id,
+          moduleId: activeModule.id,
+          sectionId: activeSection.id,
           stepId: step.id,
           comment: getStepComment(sectionKey, step.id) || undefined,
         }),
@@ -239,7 +312,8 @@ export default function TestCaseLabPage() {
   }
 
   const computeSectionStatus = (sec: Section): StepStatus => {
-    const key = getSectionKey(project!.id, module!.id, sec.id)
+    if (!project || !activeModule) return "untested"
+    const key = getSectionKey(project.id, activeModule.id, sec.id)
     const statuses = sec.steps.map((st) => runs[key]?.[st.id]?.status ?? "untested")
     if (statuses.length && statuses.every((s) => s === "passed")) return "passed"
     if (statuses.some((s) => s === "failed")) return "failed"
@@ -278,7 +352,7 @@ export default function TestCaseLabPage() {
 
   // Module progress breakdown by status so the top bar can reflect multiple states
   const moduleProgress = useMemo(() => {
-    const mod = module
+    const mod = activeModule
     if (!project || !mod) {
       return {
         total: 0,
@@ -316,7 +390,7 @@ export default function TestCaseLabPage() {
     ) as { passed: number; failed: number; blocked: number; untested: number }
 
     return { total, counts, percentages }
-  }, [project, module, runs])
+  }, [project, activeModule, getStepStatus])
 
   const progressSegments = useMemo(() => {
     const config = [
@@ -366,9 +440,9 @@ export default function TestCaseLabPage() {
   }, [project, q])
 
   const filteredSections = useMemo(() => {
-    if (!module) return [] as Section[]
-    if (!q) return module.sections
-    return module.sections.filter((s) => {
+    if (!activeModule) return [] as Section[]
+    if (!q) return activeModule.sections
+    return activeModule.sections.filter((s) => {
       if (s.name.toLowerCase().includes(q)) return true
       for (const st of s.steps) {
         if (
@@ -379,27 +453,30 @@ export default function TestCaseLabPage() {
       }
       return false
     })
-  }, [module, q])
+  }, [activeModule, q])
 
   // Refresh projects preserving current selection when possible
-  const refreshProjectsPreserve = async () => {
+  const refreshProjectsPreserve = useCallback(async () => {
+    if (!organizationId) {
+      setProjects([])
+      setProjectId("")
+      setModuleId("")
+      setSectionId("")
+      setRuns({})
+      return
+    }
     try {
-      const res = await fetch('/api/projects')
+      const params = new URLSearchParams({ organizationId })
+      const res = await fetch(`/api/projects?${params.toString()}`)
       const data = await res.json()
-      const list = ((data?.projects ?? []) as Array<any>).map((p) => ({
-        id: p._id,
-        name: p.name,
-        modules: (p.modules ?? []).map((m: any) => ({
-          id: m._id,
-          name: m.name,
-          sections: (m.sections ?? []).map((s: any) => ({
-            id: s._id,
-            name: s.name,
-            steps: (s.steps ?? []).map((st: any) => ({ id: st._id, title: st.title, description: st.description })),
-          })),
-        })),
-      })) as Project[]
+      const raw = Array.isArray(data?.projects) ? (data.projects as ApiProject[]) : []
+      const list = mapApiProjects(raw)
       setProjects(list)
+      setRuns((prev) => {
+        const scopedPrefix = `${organizationId}|`
+        const scopedEntries = Object.entries(prev).filter(([key]) => key.startsWith(scopedPrefix))
+        return Object.fromEntries(scopedEntries)
+      })
       if (!list.length) {
         setProjectId(""); setModuleId(""); setSectionId("")
         return
@@ -411,7 +488,7 @@ export default function TestCaseLabPage() {
       setModuleId(mSel?.id ?? "")
       setSectionId(sSel?.id ?? "")
     } catch {}
-  }
+  }, [organizationId, projectId, moduleId, sectionId])
 
   const slugify = (str: string) =>
     str
@@ -429,7 +506,7 @@ export default function TestCaseLabPage() {
   }
 
   const duplicateModule = async () => {
-    if (!project || !dupBase) return
+    if (!organizationId || !project || !dupBase) return
     const newName = dupName.trim()
     const newId = slugify(newName)
     if (!newId) return
@@ -449,7 +526,13 @@ export default function TestCaseLabPage() {
       await fetch('/api/projects/module/clone', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id, sourceModuleId: dupBase.id, newModuleId: newId, newName }),
+        body: JSON.stringify({
+          organizationId,
+          projectId: project.id,
+          sourceModuleId: dupBase.id,
+          newModuleId: newId,
+          newName,
+        }),
       })
     } finally {
       setDupOpen(false)
@@ -473,11 +556,12 @@ export default function TestCaseLabPage() {
   }
 
   const saveEdit = async () => {
-    if (!project || !module || !section || !editingStepId) return
+    if (!organizationId || !project || !activeModule || !activeSection || !editingStepId) return
     const payload = {
+      organizationId,
       projectId: project.id,
-      moduleId: module.id,
-      sectionId: section.id,
+      moduleId: activeModule.id,
+      sectionId: activeSection.id,
       stepId: editingStepId,
       title: editTitle.trim(),
       description: editDesc.trim(),
@@ -502,7 +586,9 @@ export default function TestCaseLabPage() {
                 if (s.id !== payload.sectionId) return s
                 return {
                   ...s,
-                  steps: s.steps.map((x) => x.id === payload.stepId ? { ...x, title: payload.title, description: payload.description } : x)
+                  steps: s.steps.map((x) => (
+                    x.id === payload.stepId ? { ...x, title: payload.title, description: payload.description } : x
+                  )),
                 }
               })
             }
@@ -526,7 +612,7 @@ export default function TestCaseLabPage() {
   }
 
   const saveComment = async (stepId: string) => {
-    if (!project || !module || !section || !sectionKey) { cancelEditComment(); return }
+    if (!organizationId || !project || !activeModule || !activeSection || !sectionKey) { cancelEditComment(); return }
     const comment = commentDraft.trim()
     // optimistic local update (preserve current status)
     setRuns((prev) => ({
@@ -544,9 +630,10 @@ export default function TestCaseLabPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          organizationId,
           projectId: project.id,
-          moduleId: module.id,
-          sectionId: section.id,
+          moduleId: activeModule.id,
+          sectionId: activeSection.id,
           stepId,
           status: getStepStatus(sectionKey, stepId),
           comment,
@@ -565,25 +652,25 @@ export default function TestCaseLabPage() {
   }
 
   const performDelete = async () => {
-    if (!project || !deleteTarget) return
+    if (!organizationId || !project || !deleteTarget) return
     try {
       if (deleteTarget.type === 'module') {
         await fetch('/api/projects/module', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: project.id, moduleId: deleteTarget.id }),
+          body: JSON.stringify({ organizationId, projectId: project.id, moduleId: deleteTarget.id }),
         })
       } else if (deleteTarget.type === 'section') {
         await fetch('/api/projects/section', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: project.id, moduleId: module?.id, sectionId: deleteTarget.id }),
+          body: JSON.stringify({ organizationId, projectId: project.id, moduleId: activeModule?.id, sectionId: deleteTarget.id }),
         })
       } else if (deleteTarget.type === 'step') {
         await fetch('/api/projects/step', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: project.id, moduleId: module?.id, sectionId: section?.id, stepId: deleteTarget.id }),
+          body: JSON.stringify({ organizationId, projectId: project.id, moduleId: activeModule?.id, sectionId: activeSection?.id, stepId: deleteTarget.id }),
         })
       }
       setDeleteOpen(false)
@@ -596,43 +683,139 @@ export default function TestCaseLabPage() {
   }
 
   const quickPassSection = () => {
-    if (!project || !module || !section) return
-    const key = getSectionKey(project.id, module.id, section.id)
-    const beforeAllPassed = section.steps.every((st) => getStepStatus(key, st.id) === "passed")
+    if (!organizationId || !project || !activeModule || !activeSection) return
+    const key = getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
+    const beforeAllPassed = activeSection.steps.every((st) => getStepStatus(key, st.id) === "passed")
     setRuns((prev) => ({
       ...prev,
-      [key]: section.steps.reduce<Record<string, StepRun>>((acc, st) => {
+      [key]: activeSection.steps.reduce<Record<string, StepRun>>((acc, st) => {
         acc[st.id] = { ...(prev[key]?.[st.id] ?? { status: "untested" }), status: "passed" }
         return acc
       }, { ...(prev[key] ?? {}) }),
     }))
     // persist in background
     Promise.all(
-      section.steps.map((st) =>
+      activeSection.steps.map((st) =>
         fetch(`/api/runs`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: project.id, moduleId: module.id, sectionId: section.id, stepId: st.id, status: 'passed' }),
+          body: JSON.stringify({
+            organizationId,
+            projectId: project.id,
+            moduleId: activeModule.id,
+            sectionId: activeSection.id,
+            stepId: st.id,
+            status: 'passed',
+          }),
         }).catch(() => undefined)
       )
     ).catch(() => undefined)
-    if (!beforeAllPassed && section.steps.length > 0) {
-      setSectionCompleteName(section.name)
+    if (!beforeAllPassed && activeSection.steps.length > 0) {
+      setSectionCompleteName(activeSection.name)
       setSectionCompleteOpen(true)
     }
   }
 
-  // Fetch projects initially
+  useEffect(() => {
+    loadOrganizations()
+  }, [loadOrganizations])
+
+  useEffect(() => {
+    setRuns({})
+    setProjectId("")
+    setModuleId("")
+    setSectionId("")
+  }, [organizationId])
+
+  const handleCreateOrganization = async () => {
+    const id = organizationFormId.trim()
+    const name = organizationFormName.trim()
+    if (!id || !name) {
+      setOrganizationFormError("Organization id and name are required")
+      return
+    }
+    setOrganizationFormSubmitting(true)
+    setOrganizationFormError("")
+    try {
+      const res = await fetch('/api/organizations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to create organization')
+      }
+      setOrganizationId(id)
+      await loadOrganizations()
+      setOrganizationFormId("")
+      setOrganizationFormName("")
+      setOrganizationFormOpen(false)
+    } catch (error) {
+      setOrganizationFormError(error instanceof Error ? error.message : 'Failed to create organization')
+    } finally {
+      setOrganizationFormSubmitting(false)
+    }
+  }
+
+  const handleCreateInvite = async () => {
+    if (!organizationId) return
+    setInviteLoading(true)
+    setInviteFeedback(null)
+    try {
+      const res = await fetch(`/api/organizations/${organizationId}/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: project?.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to create invitation')
+      }
+      const token = String(data.token)
+      const link = `${window.location.origin}/invite/${token}`
+      try {
+        await navigator.clipboard.writeText(link)
+        setInviteFeedback({ kind: 'success', text: 'Invitation link copied to clipboard' })
+      } catch {
+        setInviteFeedback({ kind: 'success', text: `Invitation link: ${link}` })
+      }
+    } catch (error) {
+      setInviteFeedback({
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Failed to create invitation',
+      })
+    } finally {
+      setInviteLoading(false)
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
     const load = async () => {
+      if (!organizationId) {
+        setProjects([])
+        setProjectId("")
+        setModuleId("")
+        setSectionId("")
+        setRuns({})
+        setLoadingProjects(false)
+        return
+      }
       setLoadingProjects(true)
       try {
-        const res = await fetch('/api/projects')
+        const params = new URLSearchParams({ organizationId })
+        const res = await fetch(`/api/projects?${params.toString()}`)
         const data = await res.json()
         if (!cancelled) {
-          const list = (data?.projects ?? []) as Array<any>
-          setProjects(list.map((p) => ({ id: p._id, name: p.name, modules: p.modules?.map((m: any) => ({ id: m._id, name: m.name, sections: m.sections?.map((s: any) => ({ id: s._id, name: s.name, steps: s.steps?.map((st: any) => ({ id: st._id, title: st.title, description: st.description })) || [] })) || [] })) || [] })))
+          const raw = Array.isArray(data?.projects) ? (data.projects as ApiProject[]) : []
+          const mapped = mapApiProjects(raw)
+          setProjects(mapped)
+          if (!mapped.length) {
+            setProjectId("")
+            setModuleId("")
+            setSectionId("")
+          }
         }
       } finally {
         if (!cancelled) setLoadingProjects(false)
@@ -640,30 +823,70 @@ export default function TestCaseLabPage() {
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [organizationId])
 
-  // Initialize selection when projects arrive
+  // Initialize selection when projects or organization change
   useEffect(() => {
-    if (projects.length && !projectId) {
-      const p = projects[0]
-      const m = p.modules[0]
-      const s = m?.sections[0]
-      setProjectId(p.id)
-      if (m) setModuleId(m.id)
-      if (s) setSectionId(s.id)
+    if (!projects.length) {
+      setProjectId("")
+      setModuleId("")
+      setSectionId("")
+      return
     }
-  }, [projects])
+
+    const ensureProject = () => {
+      const current = projects.find((p) => p.id === projectId)
+      if (current) return current
+      return projects[0]
+    }
+
+    const nextProject = ensureProject()
+    if (nextProject.id !== projectId) {
+      setProjectId(nextProject.id)
+      const firstModule = nextProject.modules[0]
+      setModuleId(firstModule?.id ?? "")
+      setSectionId(firstModule?.sections[0]?.id ?? "")
+      return
+    }
+
+    if (!nextProject.modules.length) {
+      if (moduleId) setModuleId("")
+      if (sectionId) setSectionId("")
+      return
+    }
+
+    const currentModule = nextProject.modules.find((m) => m.id === moduleId) ?? nextProject.modules[0]
+    if (currentModule.id !== moduleId) {
+      setModuleId(currentModule.id)
+      setSectionId(currentModule.sections[0]?.id ?? "")
+      return
+    }
+
+    if (!currentModule.sections.length) {
+      if (sectionId) setSectionId("")
+      return
+    }
+
+    if (!currentModule.sections.some((s) => s.id === sectionId)) {
+      setSectionId(currentModule.sections[0].id)
+    }
+  }, [projects, projectId, moduleId, sectionId])
 
   // Fetch run state for active section
   useEffect(() => {
     const loadRun = async () => {
-      if (!project || !module || !section) return
+      if (!organizationId || !project || !activeModule || !activeSection) return
       setLoadingRun(true)
       try {
-        const params = new URLSearchParams({ projectId: project.id, moduleId: module.id, sectionId: section.id })
+        const params = new URLSearchParams({
+          organizationId,
+          projectId: project.id,
+          moduleId: activeModule.id,
+          sectionId: activeSection.id,
+        })
         const res = await fetch(`/api/runs?${params.toString()}`)
         const data = await res.json()
-        const key = getSectionKey(project.id, module.id, section.id)
+        const key = getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
         const rawSteps = (data?.run?.steps ?? {}) as Record<string, RawStepRun>
         const normalized: Record<string, StepRun> = {}
         for (const [id, value] of Object.entries(rawSteps)) {
@@ -689,21 +912,21 @@ export default function TestCaseLabPage() {
       }
     }
     loadRun()
-  }, [projectId, moduleId, sectionId])
+  }, [organizationId, projectId, moduleId, sectionId, project, activeModule, activeSection])
 
   // Realtime updates via Pusher
   useEffect(() => {
-    let channel: any
-    let presence: any
+    let channel: PusherChannel | null = null
+    let presence: PusherChannel | null = null
     const subscribe = async () => {
-      if (!project || !module || !section) return
+      if (!organizationId || !project || !activeModule || !activeSection) return
       try {
         const { getPusherClient } = await import('@/lib/pusher-client')
         const pusher = getPusherClient()
-        const name = `private-section-${project.id}|${module.id}|${section.id}`
+        const name = `private-section-${organizationId}|${project.id}|${activeModule.id}|${activeSection.id}`
         channel = pusher.subscribe(name)
         channel.bind('step-updated', (evt: { stepId: string; status: StepStatus; comment?: string; jiraIssue?: StepIssue }) => {
-          const key = getSectionKey(project.id, module.id, section.id)
+          const key = getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
           setRuns((prev) => ({
             ...prev,
             [key]: {
@@ -719,7 +942,7 @@ export default function TestCaseLabPage() {
         })
 
         // presence channel (viewer count)
-        const presenceName = `presence-section-${project.id}|${module.id}|${section.id}`
+        const presenceName = `presence-section-${organizationId}|${project.id}|${activeModule.id}|${activeSection.id}`
         presence = pusher.subscribe(presenceName)
         const updateCount = () => {
           try {
@@ -730,32 +953,45 @@ export default function TestCaseLabPage() {
         presence.bind('pusher:subscription_succeeded', updateCount)
         presence.bind('pusher:member_added', updateCount)
         presence.bind('pusher:member_removed', updateCount)
-      } catch (e) {
+      } catch {
         // Missing NEXT_PUBLIC_PUSHER_* keys or client not available; skip realtime gracefully
         setViewerCount(0)
       }
     }
     subscribe()
     return () => {
-      try { if (channel) channel.unsubscribe() } catch {}
-      try { if (presence) presence.unsubscribe() } catch {}
+      try { channel?.unsubscribe() } catch {}
+      try { presence?.unsubscribe() } catch {}
+      setViewerCount(0)
     }
-  }, [projectId, moduleId, sectionId])
+  }, [organizationId, projectId, moduleId, sectionId, project, activeModule, activeSection])
 
   // Listen for structure updates and step changes globally; refresh/merge so UI updates live
   useEffect(() => {
-    let chan: any
+    let chan: PusherChannel | null = null
     const run = async () => {
+      if (!organizationId) return
       try {
         const { getPusherClient } = await import('@/lib/pusher-client')
         const p = getPusherClient()
-        chan = p.subscribe('presence-tmt')
-        chan.bind('structure-updated', () => {
+        chan = p.subscribe(`presence-tmt-${organizationId}`)
+        chan.bind('structure-updated', (evt: { organizationId: string; projectId: string }) => {
+          if (evt.organizationId !== organizationId) return
           refreshProjectsPreserve()
         })
-        chan.bind('step-updated', (evt: { projectId: string; moduleId: string; sectionId: string; stepId: string; status: StepStatus; comment?: string; jiraIssue?: StepIssue }) => {
+        chan.bind('step-updated', (evt: {
+          organizationId: string;
+          projectId: string;
+          moduleId: string;
+          sectionId: string;
+          stepId: string;
+          status: StepStatus;
+          comment?: string;
+          jiraIssue?: StepIssue;
+        }) => {
+          if (evt.organizationId !== organizationId) return
           if (!project || evt.projectId !== project.id) return
-          const key = getSectionKey(evt.projectId, evt.moduleId, evt.sectionId)
+          const key = getSectionKey(evt.organizationId, evt.projectId, evt.moduleId, evt.sectionId)
           setRuns((prev) => ({
             ...prev,
             [key]: {
@@ -772,15 +1008,94 @@ export default function TestCaseLabPage() {
       } catch {}
     }
     run()
-    return () => { try { if (chan) chan.unsubscribe() } catch {} }
-  }, [projectId])
+    return () => { try { chan?.unsubscribe() } catch {} }
+  }, [organizationId, projectId, project, refreshProjectsPreserve])
+
+  if (loadingOrganizations) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center">
+        <div className="text-sm text-muted-foreground inline-flex items-center gap-2">
+          <Loader2 className="size-4 animate-spin" />
+          Loading organizations…
+        </div>
+      </div>
+    )
+  }
+
+  if (!organizations.length) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center p-6">
+        <div className="max-w-md w-full space-y-6 text-center">
+          <div className="space-y-2">
+            <h1 className="text-2xl font-semibold">Create your first workspace</h1>
+            <p className="text-sm text-muted-foreground">
+              Set up an organization to keep projects, modules, and runs scoped to your team.
+            </p>
+          </div>
+          <div className="space-y-3 text-left">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Organization ID (slug)</span>
+              <input
+                value={organizationFormId}
+                onChange={(e) => setOrganizationFormId(e.target.value)}
+                placeholder="acme"
+                className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Display name</span>
+              <input
+                value={organizationFormName}
+                onChange={(e) => setOrganizationFormName(e.target.value)}
+                placeholder="Acme QA"
+                className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              />
+            </label>
+            {organizationFormError && (
+              <div className="text-xs text-destructive">{organizationFormError}</div>
+            )}
+            <Button
+              onClick={handleCreateOrganization}
+              disabled={organizationFormSubmitting || !organizationFormId.trim() || !organizationFormName.trim()}
+              className="w-full"
+            >
+              {organizationFormSubmitting ? <Loader2 className="size-4 animate-spin" /> : 'Create organization'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const canManageOrganization = activeOrganization?.role === 'owner' || activeOrganization?.role === 'admin'
 
   return (
     <div className="h-screen w-full p-4 flex flex-col overflow-hidden">
       {/* Top bar: Project selector (left) + Back arrow (right) + live viewers */}
       <div className="mb-4 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-3 w-full max-w-[720px]">
-          <Select value={projectId} onValueChange={handleSelectProject}>
+        <div className="flex items-center gap-3 w-full max-w-[920px]">
+          <Select value={organizationId} onValueChange={(value) => setOrganizationId(value)}>
+            <SelectTrigger className="min-w-[200px]">
+              <SelectValue placeholder="Select organization" />
+            </SelectTrigger>
+            <SelectContent>
+              {organizations.map((org) => (
+                <SelectItem key={org.id} value={org.id}>
+                  {org.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {canManageOrganization && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setOrganizationFormOpen((prev) => !prev)}
+            >
+              {organizationFormOpen ? 'Cancel' : 'New org'}
+            </Button>
+          )}
+          <Select value={projectId} onValueChange={handleSelectProject} disabled={!projects.length}>
             <SelectTrigger className="min-w-[240px]">
               <SelectValue placeholder="Select project" />
             </SelectTrigger>
@@ -798,24 +1113,92 @@ export default function TestCaseLabPage() {
             placeholder="Search modules, sections, steps…"
             className="ml-3 flex-1 rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
           />
-          <Link href="/tmt/admin">
-            <Button size="sm" className="shrink-0">+ add</Button>
-          </Link>
+          {canManageOrganization && (
+            <Link href="/tmt/admin">
+              <Button size="sm" className="shrink-0">+ add</Button>
+            </Link>
+          )}
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span>{viewerCount || 0} viewing</span>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-3">
+            {canManageOrganization && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCreateInvite}
+                disabled={inviteLoading}
+              >
+                {inviteLoading ? <Loader2 className="size-4 animate-spin" /> : 'Invite'}
+              </Button>
+            )}
+            <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>{viewerCount || 0} viewing</span>
+            </div>
+            <Link href="/" aria-label="Back to home" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <ArrowLeft className="size-4" />
+              <span className="sr-only">Back</span>
+            </Link>
           </div>
-          <Link href="/" aria-label="Back to home" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="size-4" />
-            <span className="sr-only">Back</span>
-          </Link>
+          {inviteFeedback && (
+            <div
+              className={`text-xs ${inviteFeedback.kind === 'error' ? 'text-destructive' : 'text-emerald-600'}`}
+            >
+              {inviteFeedback.text}
+            </div>
+          )}
         </div>
       </div>
+      {organizationFormOpen && canManageOrganization && (
+        <div className="mb-4 w-full max-w-[640px] rounded-lg border bg-background p-4">
+          <div className="text-sm font-medium mb-2">Create new organization</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Organization ID</span>
+              <input
+                value={organizationFormId}
+                onChange={(e) => setOrganizationFormId(e.target.value)}
+                placeholder="acme"
+                className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Display name</span>
+              <input
+                value={organizationFormName}
+                onChange={(e) => setOrganizationFormName(e.target.value)}
+                placeholder="Acme QA"
+                className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              />
+            </label>
+          </div>
+          {organizationFormError && (
+            <div className="mt-2 text-xs text-destructive">{organizationFormError}</div>
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={handleCreateOrganization}
+              disabled={organizationFormSubmitting || !organizationFormId.trim() || !organizationFormName.trim()}
+            >
+              {organizationFormSubmitting ? <Loader2 className="size-4 animate-spin" /> : 'Create'}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setOrganizationFormOpen(false)
+                setOrganizationFormError("")
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Main layout: modules sidebar + sections and steps */}
       <div className="flex gap-6 flex-1 min-h-0 min-w-0">
@@ -911,6 +1294,9 @@ export default function TestCaseLabPage() {
             <div className="divide-y flex-1 overflow-y-auto">
               {filteredSections.map((sec) => {
                 const sStatus = computeSectionStatus(sec)
+                const stepsPassed = project && activeModule
+                  ? sec.steps.filter((st) => getStepStatus(getSectionKey(project.id, activeModule.id, sec.id), st.id) === "passed").length
+                  : 0
                 return (
                   <div
                     key={sec.id}
@@ -932,7 +1318,7 @@ export default function TestCaseLabPage() {
                       <div className="flex items-center gap-2">
                         {statusBadge(sStatus)}
                         <div className="text-xs text-muted-foreground">
-                          {sec.steps.filter((st) => getStepStatus(getSectionKey(project!.id, module!.id, sec.id), st.id) === "passed").length}
+                          {stepsPassed}
                           /{sec.steps.length}
                         </div>
                         <button
@@ -948,7 +1334,7 @@ export default function TestCaseLabPage() {
                   </div>
                 )
               })}
-              {!module?.sections?.length && (
+              {!activeModule?.sections?.length && (
                 <div className="px-4 py-8 text-sm text-muted-foreground">No sections</div>
               )}
             </div>
@@ -979,19 +1365,19 @@ export default function TestCaseLabPage() {
                 </Button>
               </div>
             </div>
-            {!section && (
+            {!activeSection && (
               <div className="px-4 py-8 text-sm text-muted-foreground">Select a section to view steps</div>
             )}
-            {section && (
+            {activeSection && (
               <div className="flex flex-col gap-3 p-3 flex-1 overflow-y-auto">
                 {loadingRun && (
                   <div className="text-xs text-muted-foreground">Loading…</div>
                 )}
-                {(q ? sortedSteps(section).filter((st) => st.title.toLowerCase().includes(q) || st.description.toLowerCase().includes(q)) : sortedSteps(section)).map((step, idx) => {
+                {(q ? sortedSteps(activeSection).filter((st) => st.title.toLowerCase().includes(q) || st.description.toLowerCase().includes(q)) : sortedSteps(activeSection)).map((step, idx) => {
                   const s = getStepStatus(sectionKey, step.id)
                   const issue = getStepIssue(sectionKey, step.id)
                   const issueCreatedAt = issue?.createdAt ? new Date(issue.createdAt).toLocaleString() : undefined
-                  const displayNum = stepSort === "asc" ? idx + 1 : section.steps.length - idx
+                  const displayNum = stepSort === "asc" ? idx + 1 : activeSection.steps.length - idx
                   return (
                     <div key={step.id} className="group relative rounded-md border p-4">
                       {/* Status badge in top-right corner */}
@@ -1120,13 +1506,13 @@ export default function TestCaseLabPage() {
                           <Button
                             variant={s === "passed" ? "default" : "outline"}
                             onClick={() => {
-                              if (section && sectionKey) {
-                                const beforeAllPassed = section.steps.every((st) => getStepStatus(sectionKey, st.id) === "passed")
-                                const afterAllPassed = section.steps.every((st) =>
+                              if (activeSection && sectionKey) {
+                                const beforeAllPassed = activeSection.steps.every((st) => getStepStatus(sectionKey, st.id) === "passed")
+                                const afterAllPassed = activeSection.steps.every((st) =>
                                   st.id === step.id ? true : getStepStatus(sectionKey, st.id) === "passed"
                                 )
                                 if (!beforeAllPassed && afterAllPassed) {
-                                  setSectionCompleteName(section.name)
+                                  setSectionCompleteName(activeSection.name)
                                   setSectionCompleteOpen(true)
                                 }
                               }
@@ -1164,7 +1550,7 @@ export default function TestCaseLabPage() {
         <AlertDialogContent>
           <AlertDialogTitle>Section Completed</AlertDialogTitle>
           <AlertDialogDescription>
-            All test steps in "{sectionCompleteName}" are passed. Great job!
+            {`All test steps in "${sectionCompleteName ?? ''}" are passed. Great job!`}
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setSectionCompleteOpen(false)}>OK</AlertDialogAction>
@@ -1189,7 +1575,7 @@ export default function TestCaseLabPage() {
         <AlertDialogContent>
           <AlertDialogTitle>Delete {deleteTarget?.type}?</AlertDialogTitle>
           <AlertDialogDescription>
-            This action cannot be undone. It will permanently remove "{deleteTarget?.name}".
+            {`This action cannot be undone. It will permanently remove "${deleteTarget?.name ?? ''}".`}
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setDeleteOpen(false)}>Cancel</AlertDialogCancel>
