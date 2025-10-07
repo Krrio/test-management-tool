@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog"
 import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash, ExternalLink, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { toast } from "@/components/ui/sonner"
 
 
 type StepStatus = "untested" | "passed" | "failed" | "blocked"
@@ -159,7 +160,6 @@ export default function TestCaseLabPage() {
   const [creatingIssueFor, setCreatingIssueFor] = useState<string | null>(null)
   const [jiraErrors, setJiraErrors] = useState<Record<string, string>>({})
   const [inviteLoading, setInviteLoading] = useState(false)
-  const [inviteFeedback, setInviteFeedback] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
 
   const loadOrganizations = useCallback(async () => {
     setLoadingOrganizations(true)
@@ -192,21 +192,24 @@ export default function TestCaseLabPage() {
     return getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
   }, [organizationId, project, activeModule, activeSection])
 
-  const getStepStatus = (sKey: SectionRunKey | undefined, stepId: string): StepStatus => {
+  const getStepStatus = useCallback((sKey: SectionRunKey | undefined, stepId: string): StepStatus => {
     if (!sKey) return "untested"
     const value = runs[sKey]?.[stepId]
     return value?.status ?? "untested"
-  }
+  }, [runs])
 
-  const getStepComment = (sKey: SectionRunKey | undefined, stepId: string): string => {
+  const getStepComment = useCallback((sKey: SectionRunKey | undefined, stepId: string): string => {
     if (!sKey) return ""
     return runs[sKey]?.[stepId]?.comment ?? ""
-  }
+  }, [runs])
 
-  const getStepIssue = (sKey: SectionRunKey | undefined, stepId: string): StepIssue | undefined => {
-    if (!sKey) return undefined
-    return runs[sKey]?.[stepId]?.jiraIssue
-  }
+  const getStepIssue = useCallback(
+    (sKey: SectionRunKey | undefined, stepId: string): StepIssue | undefined => {
+      if (!sKey) return undefined
+      return runs[sKey]?.[stepId]?.jiraIssue
+    },
+    [runs],
+  )
 
   const setStepStatus = async (sKey: SectionRunKey | undefined, stepId: string, status: StepStatus, comment?: string) => {
     if (!sKey || !project || !activeModule || !activeSection || !organizationId) return
@@ -312,8 +315,8 @@ export default function TestCaseLabPage() {
   }
 
   const computeSectionStatus = (sec: Section): StepStatus => {
-    if (!project || !activeModule) return "untested"
-    const key = getSectionKey(project.id, activeModule.id, sec.id)
+    if (!project || !activeModule || !organizationId) return "untested"
+    const key = getSectionKey(organizationId, project.id, activeModule.id, sec.id)
     const statuses = sec.steps.map((st) => runs[key]?.[st.id]?.status ?? "untested")
     if (statuses.length && statuses.every((s) => s === "passed")) return "passed"
     if (statuses.some((s) => s === "failed")) return "failed"
@@ -353,7 +356,7 @@ export default function TestCaseLabPage() {
   // Module progress breakdown by status so the top bar can reflect multiple states
   const moduleProgress = useMemo(() => {
     const mod = activeModule
-    if (!project || !mod) {
+    if (!project || !mod || !organizationId) {
       return {
         total: 0,
         counts: { passed: 0, failed: 0, blocked: 0, untested: 0 },
@@ -370,10 +373,10 @@ export default function TestCaseLabPage() {
     }
 
     for (const sec of mod.sections) {
-      const key = getSectionKey(project.id, mod.id, sec.id)
+      const key = getSectionKey(organizationId, project.id, mod.id, sec.id)
       for (const st of sec.steps) {
         total += 1
-        const status = getStepStatus(key as SectionRunKey, st.id)
+        const status = getStepStatus(key, st.id)
         if (status in counts) {
           counts[status] += 1
         } else {
@@ -390,7 +393,7 @@ export default function TestCaseLabPage() {
     ) as { passed: number; failed: number; blocked: number; untested: number }
 
     return { total, counts, percentages }
-  }, [project, activeModule, getStepStatus])
+  }, [project, activeModule, organizationId, getStepStatus])
 
   const progressSegments = useMemo(() => {
     const config = [
@@ -759,36 +762,53 @@ export default function TestCaseLabPage() {
   }
 
   const handleCreateInvite = async () => {
-    if (!organizationId) return
-    setInviteLoading(true)
-    setInviteFeedback(null)
-    try {
-      const res = await fetch(`/api/organizations/${organizationId}/invite`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project?.id }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data?.error || 'Failed to create invitation')
-      }
-      const token = String(data.token)
-      const link = `${window.location.origin}/invite/${token}`
-      try {
-        await navigator.clipboard.writeText(link)
-        setInviteFeedback({ kind: 'success', text: 'Invitation link copied to clipboard' })
-      } catch {
-        setInviteFeedback({ kind: 'success', text: `Invitation link: ${link}` })
-      }
-    } catch (error) {
-      setInviteFeedback({
-        kind: 'error',
-        text: error instanceof Error ? error.message : 'Failed to create invitation',
-      })
-    } finally {
-      setInviteLoading(false)
+  if (!organizationId) return
+  setInviteLoading(true)
+  // setInviteFeedback(null) // już niepotrzebne
+  try {
+    const res = await fetch(`/api/organizations/${organizationId}/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: project?.id }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to create invitation')
     }
+
+    const token = String(data.token)
+    const link = `${window.location.origin}/invite/${token}`
+
+    try {
+      await navigator.clipboard.writeText(link)
+      toast.success("Invitation link copied to clipboard", {
+        action: {
+          label: "Open",
+          onClick: () => window.open(link, "_blank"),
+        },
+        position: "bottom-right",
+      })
+    } catch {
+      toast("Invitation link", {
+        action: {
+          label: "Copy",
+          onClick: async () => {
+            try {
+              await navigator.clipboard.writeText(link)
+              toast.success("Copied!")
+            } catch {
+              toast.error("Copy failed — select & copy manually")
+            }
+          },
+        },
+      })
+    }
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Failed to create invitation")
+  } finally {
+    setInviteLoading(false)
   }
+}
 
   useEffect(() => {
     let cancelled = false
@@ -1143,13 +1163,6 @@ export default function TestCaseLabPage() {
               <span className="sr-only">Back</span>
             </Link>
           </div>
-          {inviteFeedback && (
-            <div
-              className={`text-xs ${inviteFeedback.kind === 'error' ? 'text-destructive' : 'text-emerald-600'}`}
-            >
-              {inviteFeedback.text}
-            </div>
-          )}
         </div>
       </div>
       {organizationFormOpen && canManageOrganization && (
@@ -1260,10 +1273,18 @@ export default function TestCaseLabPage() {
                   aria-valuemax={moduleProgress.total}
                   aria-valuenow={moduleProgress.total - moduleProgress.counts.untested}
                   aria-valuetext={progressSegments
-                    .map((segment) => `${segment.label} ${segment.count}`)
+                    .map((segment) =>
+                      moduleProgress.total > 0
+                        ? `${segment.label} ${segment.count}/${moduleProgress.total}`
+                        : `${segment.label} ${segment.count}`,
+                    )
                     .join(", ")}
                   title={progressSegments
-                    .map((segment) => `${segment.label}: ${segment.count}`)
+                    .map((segment) =>
+                      moduleProgress.total > 0
+                        ? `${segment.label}: ${segment.count}/${moduleProgress.total}`
+                        : `${segment.label}: ${segment.count}`,
+                    )
                     .join(" | ")}
                 >
                   {activeProgressSegments.length > 0 &&
@@ -1281,7 +1302,10 @@ export default function TestCaseLabPage() {
                 {progressSegments.map((segment) => (
                   <div key={segment.key} className="flex items-center justify-between gap-4 whitespace-nowrap">
                     <span className="text-muted-foreground">{segment.label}</span>
-                    <span>{segment.count}{moduleProgress.total > 0 ? ` (${Math.round(segment.pct)}%)` : ""}</span>
+                    <span>
+                      {moduleProgress.total > 0 ? `${segment.count}/${moduleProgress.total}` : segment.count}
+                      {moduleProgress.total > 0 ? ` (${Math.round(segment.pct)}%)` : ""}
+                    </span>
                   </div>
                 ))}
                 <div className="flex items-center justify-between gap-4 pt-1 text-muted-foreground">
@@ -1294,8 +1318,14 @@ export default function TestCaseLabPage() {
             <div className="divide-y flex-1 overflow-y-auto">
               {filteredSections.map((sec) => {
                 const sStatus = computeSectionStatus(sec)
-                const stepsPassed = project && activeModule
-                  ? sec.steps.filter((st) => getStepStatus(getSectionKey(project.id, activeModule.id, sec.id), st.id) === "passed").length
+                const stepsPassed = project && activeModule && organizationId
+                  ? sec.steps.filter(
+                      (st) =>
+                        getStepStatus(
+                          getSectionKey(organizationId, project.id, activeModule.id, sec.id),
+                          st.id,
+                        ) === "passed",
+                    ).length
                   : 0
                 return (
                   <div
