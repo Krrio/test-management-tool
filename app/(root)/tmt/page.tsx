@@ -986,7 +986,7 @@ export default function TestCaseLabPage() {
     }
   }, [organizationId, projectId, moduleId, sectionId, project, activeModule, activeSection])
 
-  // Listen for structure updates and step changes globally; refresh/merge so UI updates live
+  // Listen for structure updates and step changes globally; refresh/merge so UI updates live and efficent
   useEffect(() => {
     let chan: PusherChannel | null = null
     const run = async () => {
@@ -1108,6 +1108,7 @@ export default function TestCaseLabPage() {
           </Select>
           {canManageOrganization && (
             <Button
+              className="h-[36px]"
               variant="outline"
               size="sm"
               onClick={() => setOrganizationFormOpen((prev) => !prev)}
