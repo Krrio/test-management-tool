@@ -792,31 +792,35 @@ export default function TestCaseLabPage() {
     if (!organizationId) return null
     if (canManageOrganization) {
       return (
-        <Badge
-          asChild
-          variant={jiraEnabled ? 'secondary' : 'outline'}
-          className={jiraBadgeClassName}
+        <button
+          type="button"
+          onClick={() => openJiraDialog(jiraEnabled ? undefined : { forceEnable: true })}
+          disabled={jiraConfigLoading}
+          className={`group inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+            jiraEnabled
+              ? 'border-emerald-500/80 text-emerald-400 hover:bg-emerald-500/10'
+              : 'border-destructive/60 text-destructive hover:bg-destructive/10'
+          } ${jiraConfigLoading ? 'opacity-80' : ''}`}
+          title={jiraEnabled ? 'Manage Jira integration' : 'Enable Jira integration'}
         >
-          <button
-            type="button"
-            onClick={() => openJiraDialog(jiraEnabled ? undefined : { forceEnable: true })}
-            disabled={jiraConfigLoading}
-            className="disabled:cursor-not-allowed focus-visible:outline-none h-[32px]"
-            title={jiraEnabled ? 'Manage Jira integration' : 'Enable Jira integration'}
-          >
-            {jiraConfigLoading ? (
-              <>
-                <Loader2 className="size-3 animate-spin" />
-                Checking Jira…
-              </>
-            ) : (
-              <>
-                <span>Jira {jiraEnabled ? 'enabled' : 'disabled'}</span>
-                {!jiraEnabled && <span>- Enable now</span>}
-              </>
-            )}
-          </button>
-        </Badge>
+          {jiraConfigLoading ? (
+            <>
+              <Loader2 className="size-3 animate-spin" />
+              <span>Checking Jira…</span>
+            </>
+          ) : (
+            <>
+              <span className={`inline-flex h-2 w-2 rounded-full ${jiraEnabled ? 'bg-emerald-400' : 'bg-destructive'}`} />
+              <span className="uppercase tracking-wide">Jira</span>
+              <span className="text-muted-foreground group-hover:text-foreground transition-colors">
+                {jiraEnabled ? 'enabled' : 'disabled'}
+              </span>
+              {!jiraEnabled && (
+                <span className="text-foreground font-semibold">Enable</span>
+              )}
+            </>
+          )}
+        </button>
       )
     }
     return (
@@ -1474,14 +1478,29 @@ export default function TestCaseLabPage() {
           <div className="flex items-center gap-3">
             {renderJiraBadge()}
             {canManageOrganization && (
-              <Button
-                size="sm"
-                variant="outline"
+              <button
+                type="button"
                 onClick={handleCreateInvite}
                 disabled={inviteLoading}
+                className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+                  inviteLoading
+                    ? 'border-muted/40 text-muted-foreground opacity-80'
+                    : 'border-primary/60 text-primary hover:bg-primary/10'
+                }`}
+                title="Generate invite link"
               >
-                {inviteLoading ? <Loader2 className="size-4 animate-spin" /> : 'Invite'}
-              </Button>
+                {inviteLoading ? (
+                  <>
+                    <Loader2 className="size-3 animate-spin" />
+                    <span>Generating…</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
+                    <span className="tracking-wide">Invite</span>
+                  </>
+                )}
+              </button>
             )}
             <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
               <span className="relative flex h-2 w-2">
@@ -1554,41 +1573,51 @@ export default function TestCaseLabPage() {
           <div className="text-sm text-muted-foreground">No projects</div>
         )}
         {/* Modules sidebar */}
-        <aside className="w-[240px] shrink-0 rounded-lg border h-full flex flex-col">
-          <div className="border-b px-4 py-3 text-sm font-medium">Modules</div>
-            <div className="p-2 flex-1 overflow-y-auto">
-              <div className="flex flex-col gap-1">
-              {filteredModules.map((m) => (
-                <div key={m.id} className="relative group">
-                    <Button
-                      variant={m.id === moduleId ? "default" : "outline"}
-                      className="justify-start w-full pr-16"
+        <aside className="w-[260px] shrink-0 rounded-lg border h-full flex flex-col bg-card/40">
+          <div className="border-b px-4 py-3 text-sm font-medium flex items-center min-h-[3.5rem]">Modules</div>
+          <div className="flex-1 overflow-y-auto">
+            <div className="py-0">
+              <div className="flex flex-col">
+                {filteredModules.map((m) => {
+                  const active = m.id === moduleId
+                  return (
+                    <button
+                      key={m.id}
                       onClick={() => handleSelectModule(m.id)}
+                      className={`relative flex w-full items-center justify-between gap-3 px-4 py-3 text-sm transition-colors border-b last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
+                        active ? 'bg-accent/40 text-foreground' : 'hover:bg-accent/20 text-muted-foreground'
+                      }`}
                     >
-                      {m.name}
-                    </Button>
-                    <div className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        aria-label="Duplicate module"
-                        onClick={() => openDuplicateModule(m)}
-                        className="inline-flex p-2 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground"
-                        title="Duplicate module"
-                      >
-                        <Copy className="size-4" />
-                      </button>
-                      <button
-                        aria-label="Delete module"
-                        onClick={() => requestDelete({ type: 'module', id: m.id, name: m.name })}
-                        className="inline-flex p-2 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground"
-                        title="Delete module"
-                      >
-                        <Trash className="size-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                      <span className="truncate font-medium text-left">
+                        {m.name}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <button
+                          aria-label="Duplicate module"
+                          onClick={(e) => { e.stopPropagation(); openDuplicateModule(m) }}
+                          className="inline-flex items-center justify-center rounded-md border border-transparent p-1.5 hover:bg-accent hover:text-foreground transition-colors"
+                          title="Duplicate module"
+                        >
+                          <Copy className="size-3.5" />
+                        </button>
+                        <button
+                          aria-label="Delete module"
+                          onClick={(e) => { e.stopPropagation(); requestDelete({ type: 'module', id: m.id, name: m.name }) }}
+                          className="inline-flex items-center justify-center rounded-md border border-transparent p-1.5 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                          title="Delete module"
+                        >
+                          <Trash className="size-3.5" />
+                        </button>
+                      </span>
+                    </button>
+                  )
+                })}
+                {!filteredModules.length && (
+                  <div className="px-4 py-6 text-xs text-muted-foreground">No modules</div>
+                )}
               </div>
             </div>
+          </div>
         </aside>
 
         {/* Sections and Steps split */}
@@ -1646,7 +1675,7 @@ export default function TestCaseLabPage() {
                 </div>
               </HoverCardContent>
             </HoverCard>
-            <div className="border-b px-4 py-3 text-sm font-medium">Sections</div>
+            <div className="border-b px-4 py-3 text-sm font-medium flex items-center min-h-[3.5rem]">Sections</div>
             <div className="divide-y flex-1 overflow-y-auto">
               {filteredSections.map((sec) => {
                 const sStatus = computeSectionStatus(sec)
@@ -1704,7 +1733,7 @@ export default function TestCaseLabPage() {
 
           {/* Steps panel */}
           <div className="w-1/2 min-w-0 rounded-lg border h-full flex flex-col">
-            <div className="border-b px-4 py-3 text-sm flex items-center justify-between gap-3">
+            <div className="border-b px-4 py-3 text-sm flex items-center justify-between gap-3 min-h-[3.5rem]">
               <div className="font-medium">Test Steps</div>
               <div className="flex items-center gap-2">
                 <Button
