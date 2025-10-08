@@ -38,6 +38,20 @@ const OrganizationInvitationSchema = new Schema(
   { timestamps: true }
 );
 
+const OrganizationJiraConfigSchema = new Schema(
+  {
+    organizationId: { type: String, required: true, unique: true },
+    enabled: { type: Boolean, default: false },
+    baseUrl: { type: String, default: "" },
+    email: { type: String, default: "" },
+    projectKey: { type: String, default: "" },
+    issueType: { type: String, default: "Task" },
+    apiToken: { type: String, default: null },
+    updatedBy: { type: String, default: null },
+  },
+  { timestamps: true }
+);
+
 export type OrganizationDocument = {
   _id: string;
   name: string;
@@ -59,10 +73,25 @@ export type OrganizationInvitationDocument = {
   projectId?: string;
 };
 
+export type OrganizationJiraConfigDocument = {
+  organizationId: string;
+  enabled: boolean;
+  baseUrl?: string;
+  email?: string;
+  projectKey?: string;
+  issueType?: string;
+  apiToken?: string | null;
+  updatedBy?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
 export const Organization = models.Organization || model<OrganizationDocument>("Organization", OrganizationSchema);
 export const OrganizationMember =
   models.OrganizationMember || model<OrganizationMemberDocument>("OrganizationMember", OrganizationMemberSchema);
 export const OrganizationInvitation =
   models.OrganizationInvitation ||
   model<OrganizationInvitationDocument>("OrganizationInvitation", OrganizationInvitationSchema);
-
+export const OrganizationJiraConfig =
+  models.OrganizationJiraConfig ||
+  model<OrganizationJiraConfigDocument>("OrganizationJiraConfig", OrganizationJiraConfigSchema);
