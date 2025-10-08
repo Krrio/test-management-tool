@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, Shield, Play, ChevronDown, Circle, CircleDot, ArrowBigRight, ArrowRight } from "lucide-react";
+import { ChevronRight, Shield, Play, ChevronDown, Circle, CircleDot, ArrowBigRight, ArrowRight, ArrowDown } from "lucide-react";
 import "@/app/home.css";
 
 const Hero = () => {
@@ -190,8 +190,9 @@ const Hero = () => {
           </div>
           {/* Scroll hint bottom-left */}
           <div className="absolute left-4 bottom-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/5 px-3 py-1 text-xs text-white/80 backdrop-blur">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/5 px-3 py-1 text-xs text-white/80 backdrop-blur space-x-2">
               <span className="h-[16px]">v1.0</span>
+              <span className="h-[16px] flex flex-row items-center justify-center">Scroll down <ArrowDown className="scale-50"/></span>
             </div>
           </div>
         </div>
