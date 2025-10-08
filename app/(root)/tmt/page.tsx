@@ -1,13 +1,14 @@
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog"
-import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash } from "lucide-react"
+import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash, ExternalLink, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { toast } from "@/components/ui/sonner"
 
 
 type StepStatus = "untested" | "passed" | "failed" | "blocked"
@@ -18,9 +19,34 @@ type TestStep = {
   description: string
 }
 
+type StepIssue = {
+  key: string
+  url?: string
+  id?: string
+  createdAt?: string
+  createdBy?: string
+}
+
 type StepRun = {
   status: StepStatus
   comment?: string
+  jiraIssue?: StepIssue
+}
+
+type RawStepRun = {
+  status?: StepStatus
+  comment?: unknown
+  jiraIssue?: (Partial<StepIssue> & { createdAt?: unknown }) | null
+}
+
+type CreateJiraResponse = {
+  stepRun?: {
+    status?: StepStatus
+    comment?: string
+    jiraIssue?: StepIssue
+  }
+  issue?: StepIssue
+  error?: string
 }
 
 type Section = {
@@ -41,11 +67,182 @@ type Project = {
   modules: Module[]
 }
 
+type Organization = {
+  id: string
+  name: string
+  role: "owner" | "admin" | "member"
+}
+
+type OrganizationJiraConfig = {
+  enabled: boolean
+  baseUrl: string
+  email: string
+  projectKey: string
+  issueType: string
+  hasToken: boolean
+  updatedAt: string | null
+}
+
+type ApiProject = {
+  _id: string
+  name: string
+  modules?: Array<{
+    _id: string
+    name: string
+    sections?: Array<{
+      _id: string
+      name: string
+      steps?: Array<{ _id: string; title: string; description: string }>
+    }>
+  }>
+}
+
+type PusherChannel = {
+  bind: (event: string, callback: (...args: unknown[]) => void) => void
+  unsubscribe: () => void
+  members?: { count?: number }
+}
+
+const mapApiProjects = (items: ApiProject[]): Project[] =>
+  items.map((p) => ({
+    id: p._id,
+    name: p.name,
+    modules: (p.modules ?? []).map((m) => ({
+      id: m._id,
+      name: m.name,
+      sections: (m.sections ?? []).map((s) => ({
+        id: s._id,
+        name: s.name,
+        steps: (s.steps ?? []).map((st) => ({ id: st._id, title: st.title, description: st.description })),
+      })),
+    })),
+  }))
+
+const normalizeJiraConfig = (value: unknown): OrganizationJiraConfig | null => {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const issueTypeRaw = typeof raw.issueType === 'string' && raw.issueType.trim() ? raw.issueType : 'Task'
+  return {
+    enabled: Boolean(raw.enabled),
+    baseUrl: typeof raw.baseUrl === 'string' ? raw.baseUrl : '',
+    email: typeof raw.email === 'string' ? raw.email : '',
+    projectKey: typeof raw.projectKey === 'string' ? raw.projectKey : '',
+    issueType: issueTypeRaw,
+    hasToken: Boolean(raw.hasToken),
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : null,
+  }
+}
+
+const isStepStatus = (value: unknown): value is StepStatus =>
+  value === 'untested' || value === 'passed' || value === 'failed' || value === 'blocked'
+
+const normalizeStepIssue = (value: unknown): StepIssue | undefined => {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  const key = typeof raw.key === 'string' ? raw.key.trim() : ''
+  if (!key) return undefined
+
+  const issue: StepIssue = { key }
+  if (typeof raw.url === 'string') issue.url = raw.url
+  if (typeof raw.id === 'string') issue.id = raw.id
+  if (typeof raw.createdBy === 'string') issue.createdBy = raw.createdBy
+
+  const createdAtValue = raw.createdAt
+  if (typeof createdAtValue === 'string') {
+    issue.createdAt = createdAtValue
+  } else if (
+    createdAtValue &&
+    typeof createdAtValue === 'object' &&
+    'toISOString' in createdAtValue &&
+    typeof (createdAtValue as { toISOString?: unknown }).toISOString === 'function'
+  ) {
+    issue.createdAt = (createdAtValue as Date).toISOString()
+  }
+
+  return issue
+}
+
+type StepUpdatedPayload = {
+  stepId: string
+  status: StepStatus
+  comment?: string
+  jiraIssue?: StepIssue
+}
+
+type StepBroadcastPayload = StepUpdatedPayload & {
+  organizationId: string
+  projectId: string
+  moduleId: string
+  sectionId: string
+}
+
+type StructureUpdatedPayload = {
+  organizationId: string
+  projectId: string
+}
+
+const parseStepUpdatedPayload = (input: unknown): StepUpdatedPayload | null => {
+  if (!input || typeof input !== 'object') return null
+  const raw = input as Record<string, unknown>
+  const stepId = typeof raw.stepId === 'string' ? raw.stepId : ''
+  const status = isStepStatus(raw.status) ? raw.status : undefined
+  if (!stepId || !status) return null
+
+  const payload: StepUpdatedPayload = {
+    stepId,
+    status,
+    comment: typeof raw.comment === 'string' ? raw.comment : undefined,
+    jiraIssue: normalizeStepIssue(raw.jiraIssue),
+  }
+
+  return payload
+}
+
+const parseStepBroadcastPayload = (input: unknown): StepBroadcastPayload | null => {
+  if (!input || typeof input !== 'object') return null
+  const base = parseStepUpdatedPayload(input)
+  if (!base) return null
+  const raw = input as Record<string, unknown>
+  const organizationId = typeof raw.organizationId === 'string' ? raw.organizationId : ''
+  const projectId = typeof raw.projectId === 'string' ? raw.projectId : ''
+  const moduleId = typeof raw.moduleId === 'string' ? raw.moduleId : ''
+  const sectionId = typeof raw.sectionId === 'string' ? raw.sectionId : ''
+  if (!organizationId || !projectId || !moduleId || !sectionId) return null
+  return { ...base, organizationId, projectId, moduleId, sectionId }
+}
+
+const parseStructureUpdatedPayload = (input: unknown): StructureUpdatedPayload | null => {
+  if (!input || typeof input !== 'object') return null
+  const raw = input as Record<string, unknown>
+  const organizationId = typeof raw.organizationId === 'string' ? raw.organizationId : ''
+  const projectId = typeof raw.projectId === 'string' ? raw.projectId : ''
+  if (!organizationId || !projectId) return null
+  return { organizationId, projectId }
+}
+
 // Data now fetched from API
 
-type SectionRunKey = `${string}|${string}|${string}` // projectId|moduleId|sectionId
+type SectionRunKey = `${string}|${string}|${string}|${string}` // organizationId|projectId|moduleId|sectionId
 
 export default function TestCaseLabPage() {
+  const [organizations, setOrganizations] = useState<Organization[]>([])
+  const [organizationId, setOrganizationId] = useState<string>("")
+  const [loadingOrganizations, setLoadingOrganizations] = useState(true)
+  const activeOrganization = useMemo(
+    () => organizations.find((org) => org.id === organizationId),
+    [organizations, organizationId],
+  )
+  const canManageOrganization = useMemo(
+    () => activeOrganization?.role === 'owner' || activeOrganization?.role === 'admin',
+    [activeOrganization],
+  )
+
+  const [organizationFormOpen, setOrganizationFormOpen] = useState(false)
+  const [organizationFormId, setOrganizationFormId] = useState("")
+  const [organizationFormName, setOrganizationFormName] = useState("")
+  const [organizationFormError, setOrganizationFormError] = useState("")
+  const [organizationFormSubmitting, setOrganizationFormSubmitting] = useState(false)
+
   const [projects, setProjects] = useState<Project[]>([])
   const [projectId, setProjectId] = useState<string>("")
   const [moduleId, setModuleId] = useState<string>("")
@@ -67,6 +264,7 @@ export default function TestCaseLabPage() {
   const [discardOpen, setDiscardOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<
+    | { type: 'project'; id: string; name: string }
     | { type: 'module'; id: string; name: string }
     | { type: 'section'; id: string; name: string }
     | { type: 'step'; id: string; name: string }
@@ -76,31 +274,81 @@ export default function TestCaseLabPage() {
   const [dupBase, setDupBase] = useState<Module | null>(null)
   const [dupName, setDupName] = useState("")
   const [search, setSearch] = useState("")
+  const [creatingIssueFor, setCreatingIssueFor] = useState<string | null>(null)
+  const [jiraErrors, setJiraErrors] = useState<Record<string, string>>({})
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [jiraConfig, setJiraConfig] = useState<OrganizationJiraConfig | null>(null)
+  const [jiraConfigLoading, setJiraConfigLoading] = useState(false)
+  const [jiraDialogOpen, setJiraDialogOpen] = useState(false)
+  const [jiraDialogError, setJiraDialogError] = useState("")
+  const [jiraSaving, setJiraSaving] = useState(false)
+  const [jiraForm, setJiraForm] = useState({
+    enabled: false,
+    baseUrl: "",
+    email: "",
+    projectKey: "",
+    issueType: "Task",
+    apiToken: "",
+  })
+
+  const loadOrganizations = useCallback(async () => {
+    setLoadingOrganizations(true)
+    try {
+      const res = await fetch('/api/organizations')
+      const data = await res.json()
+      const list = (data?.organizations ?? []) as Organization[]
+      setOrganizations(list)
+      setOrganizationId((prev) => {
+        if (prev && list.some((org) => org.id === prev)) return prev
+        return list[0]?.id ?? ""
+      })
+    } catch {
+      setOrganizations([])
+      setOrganizationId("")
+    } finally {
+      setLoadingOrganizations(false)
+    }
+  }, [])
 
   const project = useMemo(() => projects.find((p) => p.id === projectId), [projects, projectId])
-  const module = useMemo(() => project?.modules.find((m) => m.id === moduleId), [project, moduleId])
-  const section = useMemo(() => module?.sections.find((s) => s.id === sectionId), [module, sectionId])
+  const activeModule = useMemo(() => project?.modules.find((m) => m.id === moduleId), [project, moduleId])
+  const activeSection = useMemo(() => activeModule?.sections.find((s) => s.id === sectionId), [activeModule, sectionId])
+
+  const getSectionKey = (oId: string, pId: string, mId: string, sId: string): SectionRunKey =>
+    `${oId}|${pId}|${mId}|${sId}`
 
   const sectionKey = useMemo<SectionRunKey | undefined>(() => {
-    if (!project || !module || !section) return undefined
-    return `${project.id}|${module.id}|${section.id}`
-  }, [project, module, section])
+    if (!organizationId || !project || !activeModule || !activeSection) return undefined
+    return getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
+  }, [organizationId, project, activeModule, activeSection])
 
-  const getSectionKey = (pId: string, mId: string, sId: string): SectionRunKey => `${pId}|${mId}|${sId}`
-
-  const getStepStatus = (sKey: SectionRunKey | undefined, stepId: string): StepStatus => {
+  const getStepStatus = useCallback((sKey: SectionRunKey | undefined, stepId: string): StepStatus => {
     if (!sKey) return "untested"
     const value = runs[sKey]?.[stepId]
     return value?.status ?? "untested"
-  }
+  }, [runs])
 
-  const getStepComment = (sKey: SectionRunKey | undefined, stepId: string): string => {
+  const getStepComment = useCallback((sKey: SectionRunKey | undefined, stepId: string): string => {
     if (!sKey) return ""
     return runs[sKey]?.[stepId]?.comment ?? ""
-  }
+  }, [runs])
+
+  const getStepIssue = useCallback(
+    (sKey: SectionRunKey | undefined, stepId: string): StepIssue | undefined => {
+      if (!sKey) return undefined
+      return runs[sKey]?.[stepId]?.jiraIssue
+    },
+    [runs],
+  )
 
   const setStepStatus = async (sKey: SectionRunKey | undefined, stepId: string, status: StepStatus, comment?: string) => {
-    if (!sKey || !project || !module || !section) return
+    if (!sKey || !project || !activeModule || !activeSection || !organizationId) return
+    setJiraErrors((prev) => {
+      if (!prev[stepId]) return prev
+      const next = { ...prev }
+      delete next[stepId]
+      return next
+    })
     // optimistic update
     setRuns((prev) => ({
       ...prev,
@@ -119,27 +367,93 @@ export default function TestCaseLabPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          organizationId,
           projectId: project.id,
-          moduleId: module.id,
-          sectionId: section.id,
+          moduleId: activeModule.id,
+          sectionId: activeSection.id,
           stepId,
           status,
           comment,
         }),
       })
-    } catch (e) {
+    } catch {
       // ignore errors in optimistic skeleton, could rollback here
     }
   }
 
-  const setStepComment = (sKey: SectionRunKey | undefined, stepId: string, comment: string) => {
-    if (!sKey) return
-    const currentStatus = getStepStatus(sKey, stepId) || "blocked"
-    setStepStatus(sKey, stepId, currentStatus, comment)
+  const createJiraTask = async (step: TestStep) => {
+    if (!organizationId || !project || !activeModule || !activeSection || !sectionKey) return
+    if (!jiraEnabled) {
+      setJiraErrors((prev) => ({
+        ...prev,
+        [step.id]: 'Jira integration is disabled for this organization.',
+      }))
+      return
+    }
+    const key = getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
+    setCreatingIssueFor(step.id)
+    setJiraErrors((prev) => {
+      const next = { ...prev }
+      delete next[step.id]
+      return next
+    })
+    try {
+      const res = await fetch('/api/jira/issues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizationId,
+          projectId: project.id,
+          moduleId: activeModule.id,
+          sectionId: activeSection.id,
+          stepId: step.id,
+          comment: getStepComment(sectionKey, step.id) || undefined,
+        }),
+      })
+      let payload: unknown = null
+      try {
+        payload = await res.json()
+      } catch {}
+      const data = (payload ?? null) as CreateJiraResponse | null
+      if (!res.ok) {
+        const message = data?.error
+          ? String(data.error)
+          : 'Failed to create Jira issue'
+        setJiraErrors((prev) => ({ ...prev, [step.id]: message }))
+        return
+      }
+      setRuns((prev) => {
+        const prevSection = prev[key] ?? {}
+        const prevStep = prevSection[step.id]
+        const nextStatus = data?.stepRun?.status ?? prevStep?.status ?? 'failed'
+        const normalizedIssue = normalizeStepIssue(data?.stepRun?.jiraIssue)
+        return {
+          ...prev,
+          [key]: {
+            ...prevSection,
+            [step.id]: {
+              ...(prevStep ?? { status: nextStatus }),
+              status: nextStatus,
+              comment:
+                typeof data?.stepRun?.comment === 'string'
+                  ? data.stepRun.comment
+                  : prevStep?.comment,
+              jiraIssue: normalizedIssue ?? prevStep?.jiraIssue,
+            },
+          },
+        }
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create Jira issue'
+      setJiraErrors((prev) => ({ ...prev, [step.id]: message }))
+    } finally {
+      setCreatingIssueFor(null)
+    }
   }
 
   const computeSectionStatus = (sec: Section): StepStatus => {
-    const key = getSectionKey(project!.id, module!.id, sec.id)
+    if (!project || !activeModule || !organizationId) return "untested"
+    const key = getSectionKey(organizationId, project.id, activeModule.id, sec.id)
     const statuses = sec.steps.map((st) => runs[key]?.[st.id]?.status ?? "untested")
     if (statuses.length && statuses.every((s) => s === "passed")) return "passed"
     if (statuses.some((s) => s === "failed")) return "failed"
@@ -176,22 +490,67 @@ export default function TestCaseLabPage() {
     setSectionId(firstSection?.id ?? "")
   }
 
-  // Module progress (passed steps vs total)
+  // Module progress breakdown by status so the top bar can reflect multiple states
   const moduleProgress = useMemo(() => {
-    const mod = module
-    if (!project || !mod) return { passed: 0, total: 0, pct: 0 }
-    let passed = 0
-    let total = 0
-    for (const sec of mod.sections) {
-      total += sec.steps.length
-      const key = getSectionKey(project.id, mod.id, sec.id)
-      for (const st of sec.steps) {
-        if (getStepStatus(key as SectionRunKey, st.id) === "passed") passed += 1
+    const mod = activeModule
+    if (!project || !mod || !organizationId) {
+      return {
+        total: 0,
+        counts: { passed: 0, failed: 0, blocked: 0, untested: 0 },
+        percentages: { passed: 0, failed: 0, blocked: 0, untested: 0 },
       }
     }
-    const pct = total === 0 ? 0 : Math.round((passed / total) * 100)
-    return { passed, total, pct }
-  }, [project, module, runs])
+
+    let total = 0
+    const counts: Record<StepStatus | "untested", number> = {
+      passed: 0,
+      failed: 0,
+      blocked: 0,
+      untested: 0,
+    }
+
+    for (const sec of mod.sections) {
+      const key = getSectionKey(organizationId, project.id, mod.id, sec.id)
+      for (const st of sec.steps) {
+        total += 1
+        const status = getStepStatus(key, st.id)
+        if (status in counts) {
+          counts[status] += 1
+        } else {
+          counts.untested += 1
+        }
+      }
+    }
+
+    const percentages = Object.fromEntries(
+      (Object.keys(counts) as Array<keyof typeof counts>).map((status) => [
+        status,
+        total === 0 ? 0 : Number(((counts[status] / total) * 100).toFixed(2)),
+      ]),
+    ) as { passed: number; failed: number; blocked: number; untested: number }
+
+    return { total, counts, percentages }
+  }, [project, activeModule, organizationId, getStepStatus])
+
+  const progressSegments = useMemo(() => {
+    const config = [
+      { key: "passed", label: "Passed", className: "bg-primary" },
+      { key: "failed", label: "Failed", className: "bg-destructive" },
+      { key: "blocked", label: "Blocked", className: "bg-amber-500" },
+      { key: "untested", label: "Untested", className: "bg-muted" },
+    ] as const
+
+    return config.map((entry) => ({
+      ...entry,
+      count: moduleProgress.counts[entry.key],
+      pct: moduleProgress.percentages[entry.key],
+    }))
+  }, [moduleProgress])
+
+  const activeProgressSegments = useMemo(
+    () => progressSegments.filter((segment) => segment.pct > 0),
+    [progressSegments],
+  )
 
   const sortedSteps = (sec: Section) => {
     const arr = [...sec.steps]
@@ -221,9 +580,9 @@ export default function TestCaseLabPage() {
   }, [project, q])
 
   const filteredSections = useMemo(() => {
-    if (!module) return [] as Section[]
-    if (!q) return module.sections
-    return module.sections.filter((s) => {
+    if (!activeModule) return [] as Section[]
+    if (!q) return activeModule.sections
+    return activeModule.sections.filter((s) => {
       if (s.name.toLowerCase().includes(q)) return true
       for (const st of s.steps) {
         if (
@@ -234,27 +593,30 @@ export default function TestCaseLabPage() {
       }
       return false
     })
-  }, [module, q])
+  }, [activeModule, q])
 
   // Refresh projects preserving current selection when possible
-  const refreshProjectsPreserve = async () => {
+  const refreshProjectsPreserve = useCallback(async () => {
+    if (!organizationId) {
+      setProjects([])
+      setProjectId("")
+      setModuleId("")
+      setSectionId("")
+      setRuns({})
+      return
+    }
     try {
-      const res = await fetch('/api/projects')
+      const params = new URLSearchParams({ organizationId })
+      const res = await fetch(`/api/projects?${params.toString()}`)
       const data = await res.json()
-      const list = ((data?.projects ?? []) as Array<any>).map((p) => ({
-        id: p._id,
-        name: p.name,
-        modules: (p.modules ?? []).map((m: any) => ({
-          id: m._id,
-          name: m.name,
-          sections: (m.sections ?? []).map((s: any) => ({
-            id: s._id,
-            name: s.name,
-            steps: (s.steps ?? []).map((st: any) => ({ id: st._id, title: st.title, description: st.description })),
-          })),
-        })),
-      })) as Project[]
+      const raw = Array.isArray(data?.projects) ? (data.projects as ApiProject[]) : []
+      const list = mapApiProjects(raw)
       setProjects(list)
+      setRuns((prev) => {
+        const scopedPrefix = `${organizationId}|`
+        const scopedEntries = Object.entries(prev).filter(([key]) => key.startsWith(scopedPrefix))
+        return Object.fromEntries(scopedEntries)
+      })
       if (!list.length) {
         setProjectId(""); setModuleId(""); setSectionId("")
         return
@@ -266,7 +628,7 @@ export default function TestCaseLabPage() {
       setModuleId(mSel?.id ?? "")
       setSectionId(sSel?.id ?? "")
     } catch {}
-  }
+  }, [organizationId, projectId, moduleId, sectionId])
 
   const slugify = (str: string) =>
     str
@@ -284,7 +646,7 @@ export default function TestCaseLabPage() {
   }
 
   const duplicateModule = async () => {
-    if (!project || !dupBase) return
+    if (!organizationId || !project || !dupBase) return
     const newName = dupName.trim()
     const newId = slugify(newName)
     if (!newId) return
@@ -304,7 +666,13 @@ export default function TestCaseLabPage() {
       await fetch('/api/projects/module/clone', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId: project.id, sourceModuleId: dupBase.id, newModuleId: newId, newName }),
+        body: JSON.stringify({
+          organizationId,
+          projectId: project.id,
+          sourceModuleId: dupBase.id,
+          newModuleId: newId,
+          newName,
+        }),
       })
     } finally {
       setDupOpen(false)
@@ -312,6 +680,161 @@ export default function TestCaseLabPage() {
       setDupName("")
       refreshProjectsPreserve()
     }
+  }
+
+  const jiraEnabled = Boolean(jiraConfig?.enabled)
+  const jiraBadgeClassName = useMemo(
+    () =>
+      [
+        jiraEnabled ? '' : 'border-destructive/60 text-destructive',
+        jiraConfigLoading ? 'opacity-80' : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    [jiraEnabled, jiraConfigLoading],
+  )
+  const jiraUpdatedAtLabel = useMemo(() => {
+    if (!jiraConfig?.updatedAt) return ''
+    const date = new Date(jiraConfig.updatedAt)
+    return Number.isNaN(date.getTime()) ? '' : date.toLocaleString()
+  }, [jiraConfig?.updatedAt])
+
+  const seedJiraForm = (
+    config?: OrganizationJiraConfig | null,
+    opts?: { forceEnable?: boolean },
+  ) => {
+    const source = typeof config === 'undefined' ? jiraConfig : config
+    setJiraForm({
+      enabled:
+        typeof opts?.forceEnable === 'boolean'
+          ? opts.forceEnable
+          : source?.enabled ?? false,
+      baseUrl: source?.baseUrl ?? '',
+      email: source?.email ?? '',
+      projectKey: source?.projectKey ?? '',
+      issueType: source?.issueType ?? 'Task',
+      apiToken: '',
+    })
+  }
+
+  const openJiraDialog = (opts?: { forceEnable?: boolean }) => {
+    if (!canManageOrganization) return
+    seedJiraForm(undefined, opts)
+    setJiraDialogError('')
+    setJiraDialogOpen(true)
+  }
+
+  const closeJiraDialog = (config?: OrganizationJiraConfig | null) => {
+    seedJiraForm(config)
+    setJiraDialogError('')
+    setJiraDialogOpen(false)
+  }
+
+  const handleSaveJiraConfig = async () => {
+    if (!organizationId || !canManageOrganization) return
+    setJiraDialogError('')
+    setJiraSaving(true)
+    const wasEnabled = jiraEnabled
+    const payload = {
+      enabled: jiraForm.enabled,
+      baseUrl: jiraForm.baseUrl.trim(),
+      email: jiraForm.email.trim(),
+      projectKey: jiraForm.projectKey.trim(),
+      issueType: jiraForm.issueType.trim() || 'Task',
+      apiToken: jiraForm.apiToken.trim(),
+    }
+    try {
+      const res = await fetch(`/api/organizations/${organizationId}/jira`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: payload.enabled,
+          baseUrl: payload.baseUrl,
+          email: payload.email,
+          projectKey: payload.projectKey,
+          issueType: payload.issueType,
+          apiToken: payload.apiToken,
+        }),
+      })
+      let responseBody: unknown = null
+      try {
+        responseBody = await res.json()
+      } catch {}
+      if (!res.ok) {
+        const message =
+          typeof (responseBody as { error?: unknown } | null)?.error === 'string'
+            ? (responseBody as { error?: string }).error
+            : 'Failed to update Jira settings'
+        throw new Error(message)
+      }
+      const next = normalizeJiraConfig((responseBody as { jira?: unknown } | null)?.jira)
+      setJiraConfig(next)
+      closeJiraDialog(next)
+      const toastMessage = next?.enabled
+        ? wasEnabled
+          ? 'Jira integration updated'
+          : 'Jira integration enabled'
+        : wasEnabled
+          ? 'Jira integration disabled'
+          : 'Jira integration updated'
+      toast.success(toastMessage, {
+        position: 'bottom-right',
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update Jira settings'
+      setJiraDialogError(message)
+    } finally {
+      setJiraSaving(false)
+    }
+  }
+
+  const renderJiraBadge = () => {
+    if (!organizationId) return null
+    if (canManageOrganization) {
+      return (
+        <Badge
+          asChild
+          variant={jiraEnabled ? 'secondary' : 'outline'}
+          className={jiraBadgeClassName}
+        >
+          <button
+            type="button"
+            onClick={() => openJiraDialog(jiraEnabled ? undefined : { forceEnable: true })}
+            disabled={jiraConfigLoading}
+            className="disabled:cursor-not-allowed focus-visible:outline-none h-[32px]"
+            title={jiraEnabled ? 'Manage Jira integration' : 'Enable Jira integration'}
+          >
+            {jiraConfigLoading ? (
+              <>
+                <Loader2 className="size-3 animate-spin" />
+                Checking Jira…
+              </>
+            ) : (
+              <>
+                <span>Jira {jiraEnabled ? 'enabled' : 'disabled'}</span>
+                {!jiraEnabled && <span>- Enable now</span>}
+              </>
+            )}
+          </button>
+        </Badge>
+      )
+    }
+    return (
+      <Badge
+        variant={jiraEnabled ? 'secondary' : 'outline'}
+        className={jiraBadgeClassName}
+        title={jiraEnabled ? 'Jira integration is enabled for this organization' : 'Jira integration is disabled for this organization'}
+      >
+        {jiraConfigLoading ? (
+          <>
+            <Loader2 className="size-3 animate-spin" />
+            Checking Jira…
+          </>
+        ) : (
+          <>Jira {jiraEnabled ? 'enabled' : 'disabled'}</>
+        )}
+      </Badge>
+    )
   }
 
   const startEdit = (st: TestStep) => {
@@ -328,11 +851,12 @@ export default function TestCaseLabPage() {
   }
 
   const saveEdit = async () => {
-    if (!project || !module || !section || !editingStepId) return
+    if (!organizationId || !project || !activeModule || !activeSection || !editingStepId) return
     const payload = {
+      organizationId,
       projectId: project.id,
-      moduleId: module.id,
-      sectionId: section.id,
+      moduleId: activeModule.id,
+      sectionId: activeSection.id,
       stepId: editingStepId,
       title: editTitle.trim(),
       description: editDesc.trim(),
@@ -357,7 +881,9 @@ export default function TestCaseLabPage() {
                 if (s.id !== payload.sectionId) return s
                 return {
                   ...s,
-                  steps: s.steps.map((x) => x.id === payload.stepId ? { ...x, title: payload.title, description: payload.description } : x)
+                  steps: s.steps.map((x) => (
+                    x.id === payload.stepId ? { ...x, title: payload.title, description: payload.description } : x
+                  )),
                 }
               })
             }
@@ -381,7 +907,7 @@ export default function TestCaseLabPage() {
   }
 
   const saveComment = async (stepId: string) => {
-    if (!project || !module || !section || !sectionKey) { cancelEditComment(); return }
+    if (!organizationId || !project || !activeModule || !activeSection || !sectionKey) { cancelEditComment(); return }
     const comment = commentDraft.trim()
     // optimistic local update (preserve current status)
     setRuns((prev) => ({
@@ -399,9 +925,10 @@ export default function TestCaseLabPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          organizationId,
           projectId: project.id,
-          moduleId: module.id,
-          sectionId: section.id,
+          moduleId: activeModule.id,
+          sectionId: activeSection.id,
           stepId,
           status: getStepStatus(sectionKey, stepId),
           comment,
@@ -414,31 +941,37 @@ export default function TestCaseLabPage() {
 
   // old duplicateModule(mod) removed; using openDuplicateModule + duplicateModule()
 
-  const requestDelete = (target: { type: 'module'|'section'|'step'; id: string; name: string }) => {
+  const requestDelete = (target: { type: 'project'|'module'|'section'|'step'; id: string; name: string }) => {
     setDeleteTarget(target)
     setDeleteOpen(true)
   }
 
   const performDelete = async () => {
-    if (!project || !deleteTarget) return
+    if (!organizationId || !project || !deleteTarget) return
     try {
-      if (deleteTarget.type === 'module') {
+      if (deleteTarget.type === 'project') {
+        await fetch('/api/projects', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ organizationId, projectId: deleteTarget.id }),
+        })
+      } else if (deleteTarget.type === 'module') {
         await fetch('/api/projects/module', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: project.id, moduleId: deleteTarget.id }),
+          body: JSON.stringify({ organizationId, projectId: project.id, moduleId: deleteTarget.id }),
         })
       } else if (deleteTarget.type === 'section') {
         await fetch('/api/projects/section', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: project.id, moduleId: module?.id, sectionId: deleteTarget.id }),
+          body: JSON.stringify({ organizationId, projectId: project.id, moduleId: activeModule?.id, sectionId: deleteTarget.id }),
         })
       } else if (deleteTarget.type === 'step') {
         await fetch('/api/projects/step', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: project.id, moduleId: module?.id, sectionId: section?.id, stepId: deleteTarget.id }),
+          body: JSON.stringify({ organizationId, projectId: project.id, moduleId: activeModule?.id, sectionId: activeSection?.id, stepId: deleteTarget.id }),
         })
       }
       setDeleteOpen(false)
@@ -451,43 +984,192 @@ export default function TestCaseLabPage() {
   }
 
   const quickPassSection = () => {
-    if (!project || !module || !section) return
-    const key = getSectionKey(project.id, module.id, section.id)
-    const beforeAllPassed = section.steps.every((st) => getStepStatus(key, st.id) === "passed")
+    if (!organizationId || !project || !activeModule || !activeSection) return
+    const key = getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
+    const beforeAllPassed = activeSection.steps.every((st) => getStepStatus(key, st.id) === "passed")
     setRuns((prev) => ({
       ...prev,
-      [key]: section.steps.reduce<Record<string, StepRun>>((acc, st) => {
+      [key]: activeSection.steps.reduce<Record<string, StepRun>>((acc, st) => {
         acc[st.id] = { ...(prev[key]?.[st.id] ?? { status: "untested" }), status: "passed" }
         return acc
       }, { ...(prev[key] ?? {}) }),
     }))
     // persist in background
     Promise.all(
-      section.steps.map((st) =>
+      activeSection.steps.map((st) =>
         fetch(`/api/runs`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectId: project.id, moduleId: module.id, sectionId: section.id, stepId: st.id, status: 'passed' }),
+          body: JSON.stringify({
+            organizationId,
+            projectId: project.id,
+            moduleId: activeModule.id,
+            sectionId: activeSection.id,
+            stepId: st.id,
+            status: 'passed',
+          }),
         }).catch(() => undefined)
       )
     ).catch(() => undefined)
-    if (!beforeAllPassed && section.steps.length > 0) {
-      setSectionCompleteName(section.name)
+    if (!beforeAllPassed && activeSection.steps.length > 0) {
+      setSectionCompleteName(activeSection.name)
       setSectionCompleteOpen(true)
     }
   }
 
-  // Fetch projects initially
+  useEffect(() => {
+    loadOrganizations()
+  }, [loadOrganizations])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!organizationId) {
+      setJiraConfig(null)
+      setJiraConfigLoading(false)
+      setJiraDialogError("")
+      return
+    }
+    setJiraConfigLoading(true)
+    setJiraDialogError("")
+    const run = async () => {
+      try {
+        const res = await fetch(`/api/organizations/${organizationId}/jira`)
+        let payload: unknown = null
+        try {
+          payload = await res.json()
+        } catch {}
+        if (cancelled) return
+        if (!res.ok) {
+          setJiraConfig(null)
+          return
+        }
+        const next = normalizeJiraConfig((payload as { jira?: unknown } | null)?.jira)
+        setJiraConfig(next)
+      } catch {
+        if (!cancelled) setJiraConfig(null)
+      } finally {
+        if (!cancelled) setJiraConfigLoading(false)
+      }
+    }
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [organizationId])
+
+  useEffect(() => {
+    setRuns({})
+    setProjectId("")
+    setModuleId("")
+    setSectionId("")
+  }, [organizationId])
+
+  const handleCreateOrganization = async () => {
+    const id = organizationFormId.trim()
+    const name = organizationFormName.trim()
+    if (!id || !name) {
+      setOrganizationFormError("Organization id and name are required")
+      return
+    }
+    setOrganizationFormSubmitting(true)
+    setOrganizationFormError("")
+    try {
+      const res = await fetch('/api/organizations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to create organization')
+      }
+      setOrganizationId(id)
+      await loadOrganizations()
+      setOrganizationFormId("")
+      setOrganizationFormName("")
+      setOrganizationFormOpen(false)
+    } catch (error) {
+      setOrganizationFormError(error instanceof Error ? error.message : 'Failed to create organization')
+    } finally {
+      setOrganizationFormSubmitting(false)
+    }
+  }
+
+  const handleCreateInvite = async () => {
+  if (!organizationId) return
+  setInviteLoading(true)
+  // setInviteFeedback(null) // już niepotrzebne
+  try {
+    const res = await fetch(`/api/organizations/${organizationId}/invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: project?.id }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      throw new Error(data?.error || 'Failed to create invitation')
+    }
+
+    const token = String(data.token)
+    const link = `${window.location.origin}/invite/${token}`
+
+    try {
+      await navigator.clipboard.writeText(link)
+      toast.success("Invitation link copied to clipboard", {
+        action: {
+          label: "Open",
+          onClick: () => window.open(link, "_blank"),
+        },
+        position: "bottom-right",
+      })
+    } catch {
+      toast("Invitation link", {
+        action: {
+          label: "Copy",
+          onClick: async () => {
+            try {
+              await navigator.clipboard.writeText(link)
+              toast.success("Copied!")
+            } catch {
+              toast.error("Copy failed — select & copy manually")
+            }
+          },
+        },
+      })
+    }
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Failed to create invitation")
+  } finally {
+    setInviteLoading(false)
+  }
+}
+
   useEffect(() => {
     let cancelled = false
     const load = async () => {
+      if (!organizationId) {
+        setProjects([])
+        setProjectId("")
+        setModuleId("")
+        setSectionId("")
+        setRuns({})
+        setLoadingProjects(false)
+        return
+      }
       setLoadingProjects(true)
       try {
-        const res = await fetch('/api/projects')
+        const params = new URLSearchParams({ organizationId })
+        const res = await fetch(`/api/projects?${params.toString()}`)
         const data = await res.json()
         if (!cancelled) {
-          const list = (data?.projects ?? []) as Array<any>
-          setProjects(list.map((p) => ({ id: p._id, name: p.name, modules: p.modules?.map((m: any) => ({ id: m._id, name: m.name, sections: m.sections?.map((s: any) => ({ id: s._id, name: s.name, steps: s.steps?.map((st: any) => ({ id: st._id, title: st.title, description: st.description })) || [] })) || [] })) || [] })))
+          const raw = Array.isArray(data?.projects) ? (data.projects as ApiProject[]) : []
+          const mapped = mapApiProjects(raw)
+          setProjects(mapped)
+          if (!mapped.length) {
+            setProjectId("")
+            setModuleId("")
+            setSectionId("")
+          }
         }
       } finally {
         if (!cancelled) setLoadingProjects(false)
@@ -495,67 +1177,118 @@ export default function TestCaseLabPage() {
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [organizationId])
 
-  // Initialize selection when projects arrive
+  // Initialize selection when projects or organization change
   useEffect(() => {
-    if (projects.length && !projectId) {
-      const p = projects[0]
-      const m = p.modules[0]
-      const s = m?.sections[0]
-      setProjectId(p.id)
-      if (m) setModuleId(m.id)
-      if (s) setSectionId(s.id)
+    if (!projects.length) {
+      setProjectId("")
+      setModuleId("")
+      setSectionId("")
+      return
     }
-  }, [projects])
+
+    const ensureProject = () => {
+      const current = projects.find((p) => p.id === projectId)
+      if (current) return current
+      return projects[0]
+    }
+
+    const nextProject = ensureProject()
+    if (nextProject.id !== projectId) {
+      setProjectId(nextProject.id)
+      const firstModule = nextProject.modules[0]
+      setModuleId(firstModule?.id ?? "")
+      setSectionId(firstModule?.sections[0]?.id ?? "")
+      return
+    }
+
+    if (!nextProject.modules.length) {
+      if (moduleId) setModuleId("")
+      if (sectionId) setSectionId("")
+      return
+    }
+
+    const currentModule = nextProject.modules.find((m) => m.id === moduleId) ?? nextProject.modules[0]
+    if (currentModule.id !== moduleId) {
+      setModuleId(currentModule.id)
+      setSectionId(currentModule.sections[0]?.id ?? "")
+      return
+    }
+
+    if (!currentModule.sections.length) {
+      if (sectionId) setSectionId("")
+      return
+    }
+
+    if (!currentModule.sections.some((s) => s.id === sectionId)) {
+      setSectionId(currentModule.sections[0].id)
+    }
+  }, [projects, projectId, moduleId, sectionId])
 
   // Fetch run state for active section
   useEffect(() => {
     const loadRun = async () => {
-      if (!project || !module || !section) return
+      if (!organizationId || !project || !activeModule || !activeSection) return
       setLoadingRun(true)
       try {
-        const params = new URLSearchParams({ projectId: project.id, moduleId: module.id, sectionId: section.id })
+        const params = new URLSearchParams({
+          organizationId,
+          projectId: project.id,
+          moduleId: activeModule.id,
+          sectionId: activeSection.id,
+        })
         const res = await fetch(`/api/runs?${params.toString()}`)
         const data = await res.json()
-        const key = getSectionKey(project.id, module.id, section.id)
-        const stepsObj = (data?.run?.steps ?? {}) as Record<string, StepRun>
-        setRuns((prev) => ({ ...prev, [key]: stepsObj }))
+        const key = getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
+        const rawSteps = (data?.run?.steps ?? {}) as Record<string, RawStepRun>
+        const normalized: Record<string, StepRun> = {}
+        for (const [id, value] of Object.entries(rawSteps)) {
+          normalized[id] = {
+            status: value?.status ?? 'untested',
+            comment: typeof value?.comment === 'string' ? value.comment : undefined,
+            jiraIssue: normalizeStepIssue(value?.jiraIssue),
+          }
+        }
+        setRuns((prev) => ({ ...prev, [key]: normalized }))
       } finally {
         setLoadingRun(false)
       }
     }
     loadRun()
-  }, [projectId, moduleId, sectionId])
+  }, [organizationId, projectId, moduleId, sectionId, project, activeModule, activeSection])
 
   // Realtime updates via Pusher
   useEffect(() => {
-    let channel: any
-    let presence: any
+    let channel: PusherChannel | null = null
+    let presence: PusherChannel | null = null
     const subscribe = async () => {
-      if (!project || !module || !section) return
+      if (!organizationId || !project || !activeModule || !activeSection) return
       try {
         const { getPusherClient } = await import('@/lib/pusher-client')
         const pusher = getPusherClient()
-        const name = `private-section-${project.id}|${module.id}|${section.id}`
+        const name = `private-section-${organizationId}|${project.id}|${activeModule.id}|${activeSection.id}`
         channel = pusher.subscribe(name)
-        channel.bind('step-updated', (evt: { stepId: string; status: StepStatus; comment?: string }) => {
-          const key = getSectionKey(project.id, module.id, section.id)
+        channel.bind('step-updated', (...args: unknown[]) => {
+          const payload = parseStepUpdatedPayload(args[0])
+          if (!payload) return
+          const key = getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
           setRuns((prev) => ({
             ...prev,
             [key]: {
               ...(prev[key] ?? {}),
-              [evt.stepId]: {
-                ...(prev[key]?.[evt.stepId] ?? { status: 'untested' }),
-                status: evt.status,
-                comment: evt.comment ?? prev[key]?.[evt.stepId]?.comment,
+              [payload.stepId]: {
+                ...(prev[key]?.[payload.stepId] ?? { status: 'untested' }),
+                status: payload.status,
+                comment: payload.comment ?? prev[key]?.[payload.stepId]?.comment,
+                jiraIssue: payload.jiraIssue ?? prev[key]?.[payload.stepId]?.jiraIssue,
               },
             },
           }))
         })
 
         // presence channel (viewer count)
-        const presenceName = `presence-section-${project.id}|${module.id}|${section.id}`
+        const presenceName = `presence-section-${organizationId}|${project.id}|${activeModule.id}|${activeSection.id}`
         presence = pusher.subscribe(presenceName)
         const updateCount = () => {
           try {
@@ -566,40 +1299,49 @@ export default function TestCaseLabPage() {
         presence.bind('pusher:subscription_succeeded', updateCount)
         presence.bind('pusher:member_added', updateCount)
         presence.bind('pusher:member_removed', updateCount)
-      } catch (e) {
+      } catch {
         // Missing NEXT_PUBLIC_PUSHER_* keys or client not available; skip realtime gracefully
         setViewerCount(0)
       }
     }
     subscribe()
     return () => {
-      try { if (channel) channel.unsubscribe() } catch {}
-      try { if (presence) presence.unsubscribe() } catch {}
+      try { channel?.unsubscribe() } catch {}
+      try { presence?.unsubscribe() } catch {}
+      setViewerCount(0)
     }
-  }, [projectId, moduleId, sectionId])
+  }, [organizationId, projectId, moduleId, sectionId, project, activeModule, activeSection])
 
-  // Listen for structure updates and step changes globally; refresh/merge so UI updates live
+  // Listen for structure updates and step changes globally; refresh/merge so UI updates live and efficent
   useEffect(() => {
-    let chan: any
+    let chan: PusherChannel | null = null
     const run = async () => {
+      if (!organizationId) return
       try {
         const { getPusherClient } = await import('@/lib/pusher-client')
         const p = getPusherClient()
-        chan = p.subscribe('presence-tmt')
-        chan.bind('structure-updated', () => {
+        chan = p.subscribe(`presence-tmt-${organizationId}`)
+        chan.bind('structure-updated', (...args: unknown[]) => {
+          const payload = parseStructureUpdatedPayload(args[0])
+          if (!payload) return
+          if (payload.organizationId !== organizationId) return
           refreshProjectsPreserve()
         })
-        chan.bind('step-updated', (evt: { projectId: string; moduleId: string; sectionId: string; stepId: string; status: StepStatus; comment?: string }) => {
-          if (!project || evt.projectId !== project.id) return
-          const key = getSectionKey(evt.projectId, evt.moduleId, evt.sectionId)
+        chan.bind('step-updated', (...args: unknown[]) => {
+          const payload = parseStepBroadcastPayload(args[0])
+          if (!payload) return
+          if (payload.organizationId !== organizationId) return
+          if (!project || payload.projectId !== project.id) return
+          const key = getSectionKey(payload.organizationId, payload.projectId, payload.moduleId, payload.sectionId)
           setRuns((prev) => ({
             ...prev,
             [key]: {
               ...(prev[key] ?? {}),
-              [evt.stepId]: {
-                ...(prev[key]?.[evt.stepId] ?? { status: 'untested' }),
-                status: evt.status,
-                comment: evt.comment ?? prev[key]?.[evt.stepId]?.comment,
+              [payload.stepId]: {
+                ...(prev[key]?.[payload.stepId] ?? { status: 'untested' }),
+                status: payload.status,
+                comment: payload.comment ?? prev[key]?.[payload.stepId]?.comment,
+                jiraIssue: payload.jiraIssue ?? prev[key]?.[payload.stepId]?.jiraIssue,
               },
             },
           }))
@@ -607,15 +1349,92 @@ export default function TestCaseLabPage() {
       } catch {}
     }
     run()
-    return () => { try { if (chan) chan.unsubscribe() } catch {} }
-  }, [projectId])
+    return () => { try { chan?.unsubscribe() } catch {} }
+  }, [organizationId, projectId, project, refreshProjectsPreserve])
 
+  if (loadingOrganizations) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center">
+        <div className="text-sm text-muted-foreground inline-flex items-center gap-2">
+          <Loader2 className="size-4 animate-spin" />
+          Loading organizations…
+        </div>
+      </div>
+    )
+  }
+
+  if (!organizations.length) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center p-6">
+        <div className="max-w-md w-full space-y-6 text-center">
+          <div className="space-y-2">
+            <h1 className="text-2xl font-semibold">Create your first workspace</h1>
+            <p className="text-sm text-muted-foreground">
+              Set up an organization to keep projects, modules, and runs scoped to your team.
+            </p>
+          </div>
+          <div className="space-y-3 text-left">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Organization ID (slug)</span>
+              <input
+                value={organizationFormId}
+                onChange={(e) => setOrganizationFormId(e.target.value)}
+                placeholder="acme"
+                className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Display name</span>
+              <input
+                value={organizationFormName}
+                onChange={(e) => setOrganizationFormName(e.target.value)}
+                placeholder="Acme QA"
+                className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              />
+            </label>
+            {organizationFormError && (
+              <div className="text-xs text-destructive">{organizationFormError}</div>
+            )}
+            <Button
+              onClick={handleCreateOrganization}
+              disabled={organizationFormSubmitting || !organizationFormId.trim() || !organizationFormName.trim()}
+              className="w-full"
+            >
+              {organizationFormSubmitting ? <Loader2 className="size-4 animate-spin" /> : 'Create organization'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="h-screen w-full p-4 flex flex-col overflow-hidden">
       {/* Top bar: Project selector (left) + Back arrow (right) + live viewers */}
       <div className="mb-4 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-3 w-full max-w-[720px]">
-          <Select value={projectId} onValueChange={handleSelectProject}>
+        <div className="flex items-center gap-3 w-full max-w-[920px]">
+          <Select value={organizationId} onValueChange={(value) => setOrganizationId(value)}>
+            <SelectTrigger className="min-w-[200px]">
+              <SelectValue placeholder="Select organization" />
+            </SelectTrigger>
+            <SelectContent>
+              {organizations.map((org) => (
+                <SelectItem key={org.id} value={org.id}>
+                  {org.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {canManageOrganization && (
+            <Button
+              className="h-[36px]"
+              variant="outline"
+              size="sm"
+              onClick={() => setOrganizationFormOpen((prev) => !prev)}
+            >
+              {organizationFormOpen ? 'Cancel' : 'New org'}
+            </Button>
+          )}
+          <Select value={projectId} onValueChange={handleSelectProject} disabled={!projects.length}>
             <SelectTrigger className="min-w-[240px]">
               <SelectValue placeholder="Select project" />
             </SelectTrigger>
@@ -633,24 +1452,98 @@ export default function TestCaseLabPage() {
             placeholder="Search modules, sections, steps…"
             className="ml-3 flex-1 rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
           />
-          <Link href="/tmt/admin">
-            <Button size="sm" className="shrink-0">+ add</Button>
-          </Link>
+          {canManageOrganization && (
+            <Link href="/tmt/admin">
+              <Button size="sm" className="shrink-0">+ add</Button>
+            </Link>
+          )}
+          {canManageOrganization && project && (
+            <Button
+              size="sm"
+              variant="destructive"
+              className="shrink-0 inline-flex items-center gap-1.5"
+              onClick={() => requestDelete({ type: 'project', id: project.id, name: project.name })}
+              disabled={!projectId}
+            >
+              <Trash className="size-4" />
+              Delete project
+            </Button>
+          )}
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span>{viewerCount || 0} viewing</span>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex items-center gap-3">
+            {renderJiraBadge()}
+            {canManageOrganization && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCreateInvite}
+                disabled={inviteLoading}
+              >
+                {inviteLoading ? <Loader2 className="size-4 animate-spin" /> : 'Invite'}
+              </Button>
+            )}
+            <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>{viewerCount || 0} viewing</span>
+            </div>
+            <Link href="/" aria-label="Back to home" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <ArrowLeft className="size-4" />
+              <span className="sr-only">Back</span>
+            </Link>
           </div>
-          <Link href="/" aria-label="Back to home" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="size-4" />
-            <span className="sr-only">Back</span>
-          </Link>
         </div>
       </div>
+      {organizationFormOpen && canManageOrganization && (
+        <div className="mb-4 w-full max-w-[640px] rounded-lg border bg-background p-4">
+          <div className="text-sm font-medium mb-2">Create new organization</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Organization ID</span>
+              <input
+                value={organizationFormId}
+                onChange={(e) => setOrganizationFormId(e.target.value)}
+                placeholder="acme"
+                className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Display name</span>
+              <input
+                value={organizationFormName}
+                onChange={(e) => setOrganizationFormName(e.target.value)}
+                placeholder="Acme QA"
+                className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              />
+            </label>
+          </div>
+          {organizationFormError && (
+            <div className="mt-2 text-xs text-destructive">{organizationFormError}</div>
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={handleCreateOrganization}
+              disabled={organizationFormSubmitting || !organizationFormId.trim() || !organizationFormName.trim()}
+            >
+              {organizationFormSubmitting ? <Loader2 className="size-4 animate-spin" /> : 'Create'}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setOrganizationFormOpen(false)
+                setOrganizationFormError("")
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Main layout: modules sidebar + sections and steps */}
       <div className="flex gap-6 flex-1 min-h-0 min-w-0">
@@ -706,28 +1599,66 @@ export default function TestCaseLabPage() {
             <HoverCard>
               <HoverCardTrigger asChild>
                 <div
-                  className="absolute left-0 right-0 top-0 h-1.5 rounded-t-lg bg-input/60"
+                  className="absolute left-0 right-0 top-0 flex h-1.5 rounded-t-lg bg-input/60 overflow-hidden"
                   role="progressbar"
                   aria-valuemin={0}
                   aria-valuemax={moduleProgress.total}
-                  aria-valuenow={moduleProgress.passed}
-                  title={`${moduleProgress.passed}/${moduleProgress.total}`}
+                  aria-valuenow={moduleProgress.total - moduleProgress.counts.untested}
+                  aria-valuetext={progressSegments
+                    .map((segment) =>
+                      moduleProgress.total > 0
+                        ? `${segment.label} ${segment.count}/${moduleProgress.total}`
+                        : `${segment.label} ${segment.count}`,
+                    )
+                    .join(", ")}
+                  title={progressSegments
+                    .map((segment) =>
+                      moduleProgress.total > 0
+                        ? `${segment.label}: ${segment.count}/${moduleProgress.total}`
+                        : `${segment.label}: ${segment.count}`,
+                    )
+                    .join(" | ")}
                 >
-                  <div
-                    className="h-full rounded-t-lg bg-primary transition-all"
-                    style={{ width: `${moduleProgress.pct}%` }}
-                  />
+                  {activeProgressSegments.length > 0 &&
+                    activeProgressSegments.map((segment, index) => (
+                      <div
+                        key={segment.key}
+                        className={`h-full transition-all ${segment.className} ${index === 0 ? "rounded-tl-lg" : ""} ${index === activeProgressSegments.length - 1 ? "rounded-tr-lg" : ""}`}
+                        style={{ width: `${segment.pct}%` }}
+                      />
+                    ))}
                 </div>
               </HoverCardTrigger>
-              <HoverCardContent className="text-xs w-auto py-1 px-2">
+              <HoverCardContent className="text-xs w-auto py-2 px-3 space-y-1">
                 <div className="font-medium">Progress</div>
-                <div>{moduleProgress.passed} / {moduleProgress.total} ({moduleProgress.pct}%)</div>
+                {progressSegments.map((segment) => (
+                  <div key={segment.key} className="flex items-center justify-between gap-4 whitespace-nowrap">
+                    <span className="text-muted-foreground">{segment.label}</span>
+                    <span>
+                      {moduleProgress.total > 0 ? `${segment.count}/${moduleProgress.total}` : segment.count}
+                      {moduleProgress.total > 0 ? ` (${Math.round(segment.pct)}%)` : ""}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between gap-4 pt-1 text-muted-foreground">
+                  <span>Total</span>
+                  <span>{moduleProgress.total}</span>
+                </div>
               </HoverCardContent>
             </HoverCard>
             <div className="border-b px-4 py-3 text-sm font-medium">Sections</div>
             <div className="divide-y flex-1 overflow-y-auto">
               {filteredSections.map((sec) => {
                 const sStatus = computeSectionStatus(sec)
+                const stepsPassed = project && activeModule && organizationId
+                  ? sec.steps.filter(
+                      (st) =>
+                        getStepStatus(
+                          getSectionKey(organizationId, project.id, activeModule.id, sec.id),
+                          st.id,
+                        ) === "passed",
+                    ).length
+                  : 0
                 return (
                   <div
                     key={sec.id}
@@ -749,7 +1680,7 @@ export default function TestCaseLabPage() {
                       <div className="flex items-center gap-2">
                         {statusBadge(sStatus)}
                         <div className="text-xs text-muted-foreground">
-                          {sec.steps.filter((st) => getStepStatus(getSectionKey(project!.id, module!.id, sec.id), st.id) === "passed").length}
+                          {stepsPassed}
                           /{sec.steps.length}
                         </div>
                         <button
@@ -765,7 +1696,7 @@ export default function TestCaseLabPage() {
                   </div>
                 )
               })}
-              {!module?.sections?.length && (
+              {!activeModule?.sections?.length && (
                 <div className="px-4 py-8 text-sm text-muted-foreground">No sections</div>
               )}
             </div>
@@ -796,17 +1727,19 @@ export default function TestCaseLabPage() {
                 </Button>
               </div>
             </div>
-            {!section && (
+            {!activeSection && (
               <div className="px-4 py-8 text-sm text-muted-foreground">Select a section to view steps</div>
             )}
-            {section && (
+            {activeSection && (
               <div className="flex flex-col gap-3 p-3 flex-1 overflow-y-auto">
                 {loadingRun && (
                   <div className="text-xs text-muted-foreground">Loading…</div>
                 )}
-                {(q ? sortedSteps(section).filter((st) => st.title.toLowerCase().includes(q) || st.description.toLowerCase().includes(q)) : sortedSteps(section)).map((step, idx) => {
+                {(q ? sortedSteps(activeSection).filter((st) => st.title.toLowerCase().includes(q) || st.description.toLowerCase().includes(q)) : sortedSteps(activeSection)).map((step, idx) => {
                   const s = getStepStatus(sectionKey, step.id)
-                  const displayNum = stepSort === "asc" ? idx + 1 : section.steps.length - idx
+                  const issue = getStepIssue(sectionKey, step.id)
+                  const issueCreatedAt = issue?.createdAt ? new Date(issue.createdAt).toLocaleString() : undefined
+                  const displayNum = stepSort === "asc" ? idx + 1 : activeSection.steps.length - idx
                   return (
                     <div key={step.id} className="group relative rounded-md border p-4">
                       {/* Status badge in top-right corner */}
@@ -873,6 +1806,78 @@ export default function TestCaseLabPage() {
                           )}
                         </div>
                       )}
+                      {(s === "failed" || issue) && (
+                        <div className="mt-3 flex flex-col gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                          {issue ? (
+                            <div className="flex flex-wrap items-center gap-2 text-sm">
+                              <span className="font-medium text-destructive">Jira issue:</span>
+                              <Button variant="link" size="sm" className="px-0" asChild>
+                                <Link
+                                  href={issue.url ?? '#'}
+                                  target={issue.url ? '_blank' : undefined}
+                                  rel={issue.url ? 'noreferrer' : undefined}
+                                  className="flex items-center gap-1"
+                                >
+                                  {issue.key}
+                                  <ExternalLink className="size-3.5" />
+                                </Link>
+                              </Button>
+                              {issueCreatedAt && (
+                                <span className="text-xs text-muted-foreground">Created {issueCreatedAt}</span>
+                              )}
+                            </div>
+                          ) : jiraEnabled ? (
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="text-sm text-muted-foreground">Escalate this failure to Jira.</div>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => createJiraTask(step)}
+                                disabled={creatingIssueFor === step.id}
+                              >
+                                {creatingIssueFor === step.id ? (
+                                  <>
+                                    <Loader2 className="size-4 animate-spin" />
+                                    Creating issue…
+                                  </>
+                                ) : (
+                                  'Create Jira task'
+                                )}
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="text-sm font-medium text-destructive">
+                                Jira is disabled - enable now
+                              </div>
+                              {canManageOrganization ? (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => openJiraDialog({ forceEnable: true })}
+                                  disabled={jiraConfigLoading || jiraSaving}
+                                >
+                                  {jiraConfigLoading || jiraSaving ? (
+                                    <>
+                                      <Loader2 className="size-4 animate-spin" />
+                                      Please wait…
+                                    </>
+                                  ) : (
+                                    'Enable now'
+                                  )}
+                                </Button>
+                              ) : (
+                                <div className="text-xs text-muted-foreground">
+                                  Ask an administrator to enable Jira for this organization.
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {jiraErrors[step.id] && (
+                            <div className="text-xs text-destructive">{jiraErrors[step.id]}</div>
+                          )}
+                        </div>
+                      )}
                       <div className="mt-3 flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <Button
@@ -890,13 +1895,13 @@ export default function TestCaseLabPage() {
                           <Button
                             variant={s === "passed" ? "default" : "outline"}
                             onClick={() => {
-                              if (section && sectionKey) {
-                                const beforeAllPassed = section.steps.every((st) => getStepStatus(sectionKey, st.id) === "passed")
-                                const afterAllPassed = section.steps.every((st) =>
+                              if (activeSection && sectionKey) {
+                                const beforeAllPassed = activeSection.steps.every((st) => getStepStatus(sectionKey, st.id) === "passed")
+                                const afterAllPassed = activeSection.steps.every((st) =>
                                   st.id === step.id ? true : getStepStatus(sectionKey, st.id) === "passed"
                                 )
                                 if (!beforeAllPassed && afterAllPassed) {
-                                  setSectionCompleteName(section.name)
+                                  setSectionCompleteName(activeSection.name)
                                   setSectionCompleteOpen(true)
                                 }
                               }
@@ -926,15 +1931,117 @@ export default function TestCaseLabPage() {
                 })}
               </div>
             )}
-          </div>
         </div>
       </div>
+    </div>
+      {/* Jira configuration dialog */}
+      <AlertDialog
+        open={jiraDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) closeJiraDialog(jiraConfig)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>Manage Jira integration</AlertDialogTitle>
+          <AlertDialogDescription>
+            Connect this organization to your Jira site. These settings apply only to this workspace.
+          </AlertDialogDescription>
+          <div className="flex flex-col gap-3 py-2">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={jiraForm.enabled}
+                onChange={(e) => setJiraForm((prev) => ({ ...prev, enabled: e.target.checked }))}
+                className="size-4 rounded border border-input"
+              />
+              Enable Jira for this organization
+            </label>
+            <div className="grid gap-3 text-sm">
+              <label className="flex flex-col gap-1">
+                <span className="text-muted-foreground">Base URL</span>
+                <input
+                  value={jiraForm.baseUrl}
+                  onChange={(e) => setJiraForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
+                  placeholder="https://your-domain.atlassian.net"
+                  className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-muted-foreground">Email</span>
+                <input
+                  type="email"
+                  value={jiraForm.email}
+                  onChange={(e) => setJiraForm((prev) => ({ ...prev, email: e.target.value }))}
+                  placeholder="qa@company.com"
+                  className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-muted-foreground">Project key</span>
+                  <input
+                    value={jiraForm.projectKey}
+                    onChange={(e) => setJiraForm((prev) => ({ ...prev, projectKey: e.target.value }))}
+                    placeholder="QA"
+                    className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-muted-foreground">Issue type</span>
+                  <input
+                    value={jiraForm.issueType}
+                    onChange={(e) => setJiraForm((prev) => ({ ...prev, issueType: e.target.value }))}
+                    placeholder="Task"
+                    className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                  />
+                </label>
+              </div>
+              <label className="flex flex-col gap-1">
+                <span className="text-muted-foreground">API token</span>
+                <input
+                  type="password"
+                  value={jiraForm.apiToken}
+                  onChange={(e) => setJiraForm((prev) => ({ ...prev, apiToken: e.target.value }))}
+                  placeholder="Jira API token"
+                  className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                />
+              </label>
+            </div>
+            {jiraConfig?.hasToken && (
+              <div className="text-xs text-muted-foreground">
+                Leave the API token blank to keep the existing one on file.
+              </div>
+            )}
+            {jiraUpdatedAtLabel && (
+              <div className="text-xs text-muted-foreground">
+                Last updated {jiraUpdatedAtLabel}
+              </div>
+            )}
+            {jiraDialogError && (
+              <div className="text-xs text-destructive">{jiraDialogError}</div>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => closeJiraDialog(jiraConfig)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSaveJiraConfig} disabled={jiraSaving}>
+              {jiraSaving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                'Save changes'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* Section Completed Alert */}
       <AlertDialog open={sectionCompleteOpen} onOpenChange={setSectionCompleteOpen}>
         <AlertDialogContent>
           <AlertDialogTitle>Section Completed</AlertDialogTitle>
           <AlertDialogDescription>
-            All test steps in "{sectionCompleteName}" are passed. Great job!
+            {`All test steps in "${sectionCompleteName ?? ''}" are passed. Great job!`}
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setSectionCompleteOpen(false)}>OK</AlertDialogAction>
@@ -959,7 +2066,7 @@ export default function TestCaseLabPage() {
         <AlertDialogContent>
           <AlertDialogTitle>Delete {deleteTarget?.type}?</AlertDialogTitle>
           <AlertDialogDescription>
-            This action cannot be undone. It will permanently remove "{deleteTarget?.name}".
+            {`This action cannot be undone. It will permanently remove "${deleteTarget?.name ?? ''}".`}
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setDeleteOpen(false)}>Cancel</AlertDialogCancel>

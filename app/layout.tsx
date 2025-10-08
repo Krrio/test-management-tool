@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/site-header";
+import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,6 +55,7 @@ export default function RootLayout({
           >
             <SiteHeader />
             {children}
+            <Toaster />
           </ThemeProvider>
         </body>
       </html>

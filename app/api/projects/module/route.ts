@@ -3,22 +3,49 @@ import { auth } from "@clerk/nextjs/server";
 import { connectDB } from "@/lib/db";
 import { Project } from "@/models/Project";
 import { getPusher } from "@/lib/pusher-server";
+import { ensureOrganizationAccess } from "@/lib/organizations";
+
+type DeleteModulePayload = {
+  projectId?: string;
+  moduleId?: string;
+  organizationId?: string;
+};
 
 export async function DELETE(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  let body: DeleteModulePayload;
+  try {
+    body = (await req.json()) as DeleteModulePayload;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const { projectId, moduleId, organizationId } = body || {};
+  if (!projectId || !moduleId || !organizationId) {
+    return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+  }
+
+  const membership = await ensureOrganizationAccess(userId, organizationId);
+  if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   await connectDB();
-  let body: any;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-  const { projectId, moduleId } = body || {};
-  if (!projectId || !moduleId) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
-  const proj: any = await Project.findById(projectId);
-  if (!proj) return NextResponse.json({ error: "Project not found" }, { status: 404 });
-  const before = proj.modules.length;
-  proj.modules = proj.modules.filter((m: any) => m._id !== moduleId);
-  if (proj.modules.length === before) return NextResponse.json({ error: "Module not found" }, { status: 404 });
-  await proj.save();
-  try { const p = getPusher(); await p.trigger('presence-tmt', 'structure-updated', { projectId }); } catch {}
+  const project = await Project.findOne({ _id: projectId, organizationId });
+  if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 });
+
+  const before = project.modules.length;
+  project.modules = project.modules.filter((module: { _id: string }) => module._id !== moduleId);
+  if (project.modules.length === before) {
+    return NextResponse.json({ error: "Module not found" }, { status: 404 });
+  }
+
+  await project.save();
+
+  try {
+    const p = getPusher();
+    await p.trigger(`presence-tmt-${organizationId}`, "structure-updated", { projectId, organizationId });
+  } catch {}
+
   return NextResponse.json({ ok: true });
 }
-

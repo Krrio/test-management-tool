@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { connectDB } from "@/lib/db";
 import { parseExcel, detectExcelFormat } from "@/lib/excel";
 import { Project } from "@/models/Project";
+import { ensureOrganizationAccess } from "@/lib/organizations";
 
 export const runtime = "nodejs";
 
@@ -122,8 +123,17 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const file = formData.get("file");
+  const organizationId = String(formData.get("organizationId") || "").trim();
   if (!(file instanceof Blob)) {
     return NextResponse.json({ error: "Expected file field named 'file'" }, { status: 400 });
+  }
+  if (!organizationId) {
+    return NextResponse.json({ error: "organizationId is required" }, { status: 400 });
+  }
+
+  const membership = await ensureOrganizationAccess(userId, organizationId);
+  if (!membership) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const arrayBuffer = await file.arrayBuffer();
@@ -160,7 +170,11 @@ export async function POST(request: Request) {
   await connectDB();
 
   for (const doc of aggregated.docs) {
-    await Project.findOneAndUpdate({ _id: doc._id }, doc, { upsert: true, new: true });
+    await Project.findOneAndUpdate(
+      { _id: doc._id, organizationId },
+      { ...doc, organizationId },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
   }
 
   return NextResponse.json({
