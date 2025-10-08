@@ -264,6 +264,7 @@ export default function TestCaseLabPage() {
   const [discardOpen, setDiscardOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<
+    | { type: 'project'; id: string; name: string }
     | { type: 'module'; id: string; name: string }
     | { type: 'section'; id: string; name: string }
     | { type: 'step'; id: string; name: string }
@@ -940,7 +941,7 @@ export default function TestCaseLabPage() {
 
   // old duplicateModule(mod) removed; using openDuplicateModule + duplicateModule()
 
-  const requestDelete = (target: { type: 'module'|'section'|'step'; id: string; name: string }) => {
+  const requestDelete = (target: { type: 'project'|'module'|'section'|'step'; id: string; name: string }) => {
     setDeleteTarget(target)
     setDeleteOpen(true)
   }
@@ -948,7 +949,13 @@ export default function TestCaseLabPage() {
   const performDelete = async () => {
     if (!organizationId || !project || !deleteTarget) return
     try {
-      if (deleteTarget.type === 'module') {
+      if (deleteTarget.type === 'project') {
+        await fetch('/api/projects', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ organizationId, projectId: deleteTarget.id }),
+        })
+      } else if (deleteTarget.type === 'module') {
         await fetch('/api/projects/module', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
@@ -1449,6 +1456,18 @@ export default function TestCaseLabPage() {
             <Link href="/tmt/admin">
               <Button size="sm" className="shrink-0">+ add</Button>
             </Link>
+          )}
+          {canManageOrganization && project && (
+            <Button
+              size="sm"
+              variant="destructive"
+              className="shrink-0 inline-flex items-center gap-1.5"
+              onClick={() => requestDelete({ type: 'project', id: project.id, name: project.name })}
+              disabled={!projectId}
+            >
+              <Trash className="size-4" />
+              Delete project
+            </Button>
           )}
         </div>
         <div className="flex flex-col items-end gap-2">
