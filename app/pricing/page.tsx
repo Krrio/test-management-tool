@@ -240,7 +240,7 @@ export default function PricingPage() {
           {/* Content area */}
           <div className="w-full flex flex-col items-center justify-center max-w-7xl mx-auto">
             <div className="w-full flex flex-row items-start justify-between mt-10">
-              <h2 className="text-6xl font-devis leading-16">
+              <h2 className="text-6xl font-funky leading-16">
                 We&apos;ve got a plan <br />
                 that&apos;s perfect for you
               </h2>
@@ -351,7 +351,7 @@ export default function PricingPage() {
                       </CardContent>
                       <Separator />
                       <CardFooter className="flex flex-col space-y-2 items-start justify-center">
-                        <p className="uppercase font-bold">Features</p>
+                        <p className="uppercase font-bold tracking-tight">Features</p>
                         <p className="flex flex-col justify-end leading-tight text-sm">Everything in our free plan plus...</p>
                         <div className=" mt-2 flex flex-col space-y-2">
                           <ul className="space-y-2">
@@ -388,7 +388,7 @@ export default function PricingPage() {
                         </CardAction>
                         <CardDescription className="flex flex-row items-end space-x-2">
                           <div className="flex items-end">
-                            <p className="text-5xl font-bold leading-none mt-4">$20</p>
+                            <p className="text-5xl font-funkty font-bold leading-none mt-4">$20</p>
                           </div>
                           <div className="flex flex-col justify-end leading-tight text-sm">
                             <p>per user</p>
@@ -402,7 +402,7 @@ export default function PricingPage() {
                       </CardContent>
                       <Separator />
                       <CardFooter className="flex flex-col space-y-2 items-start justify-center">
-                        <p className="uppercase font-bold">Features</p>
+                        <p className="uppercase font-bold tracking-tight">Features</p>
                         <p className="flex flex-col justify-end leading-tight text-sm">Everything in Basic plus...</p>
                         <div className="mt-2 flex flex-col space-y-2">
                           <ul className="space-y-2">
@@ -448,7 +448,7 @@ export default function PricingPage() {
                       </CardContent>
                       <Separator />
                       <CardFooter className="flex flex-col space-y-2 items-start justify-center">
-                        <p className="uppercase font-bold">Features</p>
+                        <p className="uppercase font-bold tracking-tight">Features</p>
                         <p className="flex flex-col justify-end leading-tight text-sm">Everything in Bussines plus...</p>
                         <div className=" mt-2 flex flex-col space-y-2">
                           <ul className="space-y-2">
