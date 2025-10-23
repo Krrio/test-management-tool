@@ -1120,10 +1120,6 @@ export default function TestCaseLabPage() {
     try {
       await navigator.clipboard.writeText(link)
       toast.success("Invitation link copied to clipboard", {
-        action: {
-          label: "Open",
-          onClick: () => window.open(link, "_blank"),
-        },
         position: "bottom-right",
       })
     } catch {

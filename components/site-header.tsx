@@ -16,7 +16,7 @@ import { Badge } from "./ui/badge";
 
 export function SiteHeader() {
   const pathname = usePathname();
-  if (pathname !== "/") return null;
+  if (pathname !== "/" && pathname !== "/pricing") return null;
 
   return (
     <header className="relative flex items-center h-12 bg-black px-8">
@@ -44,4 +44,3 @@ export function SiteHeader() {
     </header>
   );
 }
-

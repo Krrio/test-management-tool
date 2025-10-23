@@ -101,13 +101,13 @@ const Hero = () => {
               <SignedOut>
                 <Link href="/sign-in">
                   <Button className="rounded-full px-6 font-devis" size="lg">
-                    Let's start
+                    Let&apos;s start
                   </Button>
                 </Link>
               </SignedOut>
-              <Link href="#discover">
-                <Button className="rounded-full px-6 h-[44px] w-[132px]! bg-[#1a1a1a]! border-none cursor-pointer font-devis" size="lg" variant="outline">
-                  Docs
+              <Link href="/pricing">
+                <Button className="rounded-full z-20 px-6 h-[44px] w-[132px] bg-[#1a1a1a] border border-white/10 hover:bg-white/10 cursor-pointer font-devis" size="lg" variant="outline">
+                  Contact
                 </Button>
               </Link>
             </div>
