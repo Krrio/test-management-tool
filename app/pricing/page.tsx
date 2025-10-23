@@ -195,11 +195,24 @@ const CADENCES = [
   { key: "yearly" as const, label: "Annual billing", badge: "Save 16%" },
 ]
 
+const CARD_PRICING = {
+  monthly: {
+    basic: { price: "$10", cadence: "per month" },
+    business: { price: "$20", cadence: "per month" },
+    enterprise: { price: "$40", cadence: "per month" },
+  },
+  yearly: {
+    basic: { price: "$99", cadence: "per year" },
+    business: { price: "$199", cadence: "per year" },
+    enterprise: { price: "$399", cadence: "per year" },
+  },
+} as const
+
 type CadenceKey = keyof typeof PLAN_DATA
 
 export default function PricingPage() {
   const [cadence, setCadence] = useState<CadenceKey>("monthly")
-  const plans = PLAN_DATA[cadence]
+  const cardPricing = CARD_PRICING[cadence]
 
   return (
     <main className="relative min-h-[calc(100vh-4rem)] w-full overflow-x-hidden">
@@ -337,11 +350,11 @@ export default function PricingPage() {
                         <CardTitle className="text-2xl">Basic plan</CardTitle>
                         <CardDescription className="flex flex-row items-end space-x-2">
                           <div className="flex items-end">
-                            <p className="text-5xl font-bold leading-none mt-4">$10</p>
+                            <p className="text-5xl font-bold leading-none mt-4">{cardPricing.basic.price}</p>
                           </div>
                           <div className="flex flex-col justify-end leading-tight text-sm">
                             <p>per user</p>
-                            <p>per month</p>
+                            <p>{cardPricing.basic.cadence}</p>
                           </div>
                         </CardDescription>
                       </CardHeader>
@@ -388,11 +401,11 @@ export default function PricingPage() {
                         </CardAction>
                         <CardDescription className="flex flex-row items-end space-x-2">
                           <div className="flex items-end">
-                            <p className="text-5xl font-funkty font-bold leading-none mt-4">$20</p>
+                            <p className="text-5xl font-bold leading-none mt-4">{cardPricing.business.price}</p>
                           </div>
                           <div className="flex flex-col justify-end leading-tight text-sm">
                             <p>per user</p>
-                            <p>per month</p>
+                            <p>{cardPricing.business.cadence}</p>
                           </div>
                         </CardDescription>
                       </CardHeader>
@@ -434,11 +447,11 @@ export default function PricingPage() {
                         <CardTitle className="text-2xl">Enterprise plan</CardTitle>
                         <CardDescription className="flex flex-row items-end space-x-2">
                           <div className="flex items-end">
-                            <p className="text-5xl font-bold leading-none mt-4">$40</p>
+                            <p className="text-5xl font-bold leading-none mt-4">{cardPricing.enterprise.price}</p>
                           </div>
                           <div className="flex flex-col justify-end leading-tight text-sm">
                             <p>per user</p>
-                            <p>per month</p>
+                            <p>{cardPricing.enterprise.cadence}</p>
                           </div>
                         </CardDescription>
                       </CardHeader>
