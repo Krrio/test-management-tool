@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
+import { Companies } from "@/components/socialproof"
 
 const PLAN_DATA = {
   monthly: [
@@ -227,7 +228,7 @@ export default function PricingPage() {
           <div className="pointer-events-none absolute inset-0 z-0">
             {/* top-right elliptical glow (matches reference smear) */}
             <div
-              className="absolute right-[-10%] top-[-18%] h-[160%] w-[72%] blur-3xl"
+              className="absolute md:right-[-10%] md:top-[-18%] md:h-[160%] md:w-[72%] right-[0%] top-[-20%] h-[60%] w-[82%] blur-3xl"
               style={{
                 background:
                   "radial-gradient(75% 62% at 80% 12%, rgba(255,255,255,0.92) 0%, rgba(243,248,246,0.62) 24%, rgba(206,232,218,0.32) 48%, rgba(0,0,0,0) 72%)",
@@ -243,7 +244,7 @@ export default function PricingPage() {
             />
             {/* bottom-left small blob */}
             <div
-              className="absolute left-[-14%] bottom-[-16%] h-[58%] w-[52%] blur-2xl"
+              className="absolute md:left-[-14%] md:bottom-[-5%] md:h-[88%] md:w-[52%] blur-2xl"
               style={{
                 background:
                   "radial-gradient(56% 56% at 50% 50%, rgba(180,210,255,0.42), rgba(180,210,255,0.22) 42%, rgba(0,0,0,0) 70%)",
@@ -253,11 +254,11 @@ export default function PricingPage() {
           {/* Content area */}
           <div className="w-full flex flex-col items-center justify-center max-w-7xl mx-auto">
             <div className="w-full flex flex-row items-start justify-between mt-10">
-              <h2 className="text-6xl font-funky leading-16">
+              <h2 className="text-2xl sm:text-6xl font-funky sm:leading-16">
                 We&apos;ve got a plan <br />
                 that&apos;s perfect for you
               </h2>
-                <div className="flex flex-row flex-wrap items-center gap-2">
+                <div className="hidden sm:flex flex-row flex-wrap items-center gap-2">
                   <div className="*:data-[slot=avatar]:ring-background flex -space-x-2">
                     <Avatar className="border border-gray-200">
                       <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn"/>
@@ -290,14 +291,13 @@ export default function PricingPage() {
                   </Avatar>
                 </div>
                   <div className="flex flex-col items-start justify-center">
-                    <div className="flex items-center gap-1 text-sm font-semibold text-white">
+                    <div className="flex items-center text-sm font-semibold text-white">
                       {[...Array(5)].map((_, idx) => (
-                        <img key={idx} src="/star.svg" alt="star" className="h-6 w-6 invert" />
+                        <img key={idx} src="/star.svg" alt="star" className="h-4 w-4 invert" />
                       ))}
-                      <span className="ml-2">5.0</span>
+                      <span className="font-devis ml-1">5.0</span>
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-xs text-white/70">
-                      <span className="inline-block h-px w-12 bg-white/30" />
                       <span>from 4,000+ reviews</span>
                     </div>
                   </div>
@@ -486,6 +486,7 @@ export default function PricingPage() {
                       </CardFooter>
                     </Card>
               </div>
+              <Companies />
             </div>
           </div>
         </div>

@@ -106,8 +106,8 @@ const Hero = () => {
                 </Link>
               </SignedOut>
               <Link href="/pricing">
-                <Button className="rounded-full z-20 px-6 h-[44px] w-[132px] bg-[#1a1a1a] border border-white/10 hover:bg-white/10 cursor-pointer font-devis" size="lg" variant="outline">
-                  Contact
+                <Button className="rounded-full z-20 px-6 h-[44px] w-[132px] bg-black! border border-white/10 hover:bg-white/10 cursor-pointer font-devis" size="lg" variant="outline">
+                  Pricing
                 </Button>
               </Link>
             </div>
