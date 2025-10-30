@@ -79,7 +79,7 @@ const Hero = () => {
             {/* small pill above title */}
             <Link href="/roadmap">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border bg-white/5 px-3 py-2 text-xs text-white/80 backdrop-blur">
-              <span className="inline-flex h-2 w-2 rounded-full bg-white/70 font-funky" /> See the Roadmap
+              <span className="inline-flex h-2 w-2 rounded-full bg-white/70 font-funky" /> Changelog
               <ChevronRight className="size-3.5" />
             </div>
             </Link>
