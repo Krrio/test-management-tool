@@ -16,13 +16,13 @@ import { Badge } from "./ui/badge";
 
 export function SiteHeader() {
   const pathname = usePathname();
-  if (pathname !== "/") return null;
+  if (pathname !== "/" && pathname !== "/pricing") return null;
 
   return (
     <header className="relative flex items-center h-12 bg-black px-8">
       <div className="flex-1 min-w-0 ">
         <Link href="/" className="font-medium flex-row flex items-center justify-start tracking-tight leading-[1.08]">
-          <Image src="/check.svg" alt="logo" width={36} height={36} className="mr-2"/>TMT
+          <Image src="/check.svg" alt="logo" width={36} height={36} className="mr-2 font-funky"/>Quarium
         </Link>
       </div>
       {/* <div className="absolute left-1/2 -translate-x-1/2">
@@ -44,4 +44,3 @@ export function SiteHeader() {
     </header>
   );
 }
-

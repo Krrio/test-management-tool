@@ -77,10 +77,13 @@ const Hero = () => {
           {/* Center content */}
           <section className="relative z-10 mx-auto flex h-full max-w-4xl flex-col items-center justify-center text-center px-6">
             {/* small pill above title */}
+            <Link href="/roadmap">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border bg-white/5 px-3 py-2 text-xs text-white/80 backdrop-blur">
-              <span className="inline-flex h-2 w-2 rounded-full bg-white/70 font-devis" /> Unlock full potential
+              <span className="inline-flex h-2 w-2 rounded-full bg-white/70 font-funky" /> Changelog
               <ChevronRight className="size-3.5" />
             </div>
+            </Link>
+
 
             <h1 className="text-4xl sm:text-6xl md:text-7xl tracking-tight leading-[1.08] font-devis">
               <span className="text-white">Streamline Your</span><br />
@@ -101,13 +104,13 @@ const Hero = () => {
               <SignedOut>
                 <Link href="/sign-in">
                   <Button className="rounded-full px-6 font-devis" size="lg">
-                    Let's start
+                    Let&apos;s start
                   </Button>
                 </Link>
               </SignedOut>
-              <Link href="#discover">
-                <Button className="rounded-full px-6 h-[44px] w-[132px]! bg-[#1a1a1a]! border-none cursor-pointer font-devis" size="lg" variant="outline">
-                  Docs
+              <Link href="/pricing">
+                <Button className="rounded-full z-20 px-6 h-[44px] w-[132px] bg-black! border border-white/10 hover:bg-white/10 cursor-pointer font-devis" size="lg" variant="outline">
+                  Pricing
                 </Button>
               </Link>
             </div>
