@@ -77,10 +77,13 @@ const Hero = () => {
           {/* Center content */}
           <section className="relative z-10 mx-auto flex h-full max-w-4xl flex-col items-center justify-center text-center px-6">
             {/* small pill above title */}
+            <Link href="/roadmap">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border bg-white/5 px-3 py-2 text-xs text-white/80 backdrop-blur">
-              <span className="inline-flex h-2 w-2 rounded-full bg-white/70 font-devis" /> Unlock full potential
+              <span className="inline-flex h-2 w-2 rounded-full bg-white/70 font-funky" /> See the Roadmap
               <ChevronRight className="size-3.5" />
             </div>
+            </Link>
+
 
             <h1 className="text-4xl sm:text-6xl md:text-7xl tracking-tight leading-[1.08] font-devis">
               <span className="text-white">Streamline Your</span><br />
