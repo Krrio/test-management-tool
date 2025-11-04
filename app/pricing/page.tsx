@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import Link from "next/link"
 import { ArrowDown, ArrowRight, Check, ChevronRight } from "lucide-react"
 import { LayoutGroup, motion } from "framer-motion"
@@ -22,6 +22,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Companies } from "@/components/socialproof"
+import { toast } from "@/components/ui/sonner"
 
 const PLAN_DATA = {
   monthly: [
@@ -210,10 +211,50 @@ const CARD_PRICING = {
 } as const
 
 type CadenceKey = keyof typeof PLAN_DATA
+type CheckoutPlanKey = "basic" | "business" | "enterprise"
 
 export default function PricingPage() {
   const [cadence, setCadence] = useState<CadenceKey>("monthly")
+  const [loadingPlan, setLoadingPlan] = useState<CheckoutPlanKey | null>(null)
   const cardPricing = CARD_PRICING[cadence]
+
+  const handleCheckout = useCallback(
+    async (planKey: CheckoutPlanKey) => {
+      setLoadingPlan(planKey)
+
+      try {
+        const response = await fetch("/api/stripe/checkout", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            plan: planKey,
+            cadence,
+          }),
+        })
+
+        const result = (await response.json().catch(() => ({}))) as { url?: string; error?: string }
+
+        if (!response.ok) {
+          throw new Error(result?.error ?? "Nie udało się zainicjować płatności Stripe.")
+        }
+
+        if (!result?.url) {
+          throw new Error("Stripe nie zwrócił adresu przekierowania.")
+        }
+
+        window.location.href = result.url
+      } catch (error) {
+        console.error("Stripe checkout error:", error)
+        const message = error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd Stripe."
+        toast.error(message)
+      } finally {
+        setLoadingPlan(null)
+      }
+    },
+    [cadence],
+  )
 
   return (
     <main className="relative min-h-[calc(100vh-4rem)] w-full overflow-x-hidden">
@@ -360,7 +401,13 @@ export default function PricingPage() {
                       </CardHeader>
                       <CardContent>
                         <p className="text-sm">Basic features up to 10 users.</p>
-                        <Button className="mt-8 w-full h-12 rounded-lg font-bold cursor-pointer">Get Started</Button>
+                        <Button
+                          className="mt-8 w-full h-12 rounded-lg font-bold cursor-pointer"
+                          onClick={() => handleCheckout("basic")}
+                          disabled={loadingPlan === "basic"}
+                        >
+                          {loadingPlan === "basic" ? "Redirecting..." : "Get Started"}
+                        </Button>
                       </CardContent>
                       <Separator />
                       <CardFooter className="flex flex-col space-y-2 items-start justify-center">
@@ -411,7 +458,13 @@ export default function PricingPage() {
                       </CardHeader>
                       <CardContent>
                         <p className="text-sm">Basic features up to 20 users.</p>
-                        <Button className="mt-8 w-full h-12 rounded-lg font-bold cursor-pointer">Get Started</Button>
+                        <Button
+                          className="mt-8 w-full h-12 rounded-lg font-bold cursor-pointer"
+                          onClick={() => handleCheckout("business")}
+                          disabled={loadingPlan === "business"}
+                        >
+                          {loadingPlan === "business" ? "Redirecting..." : "Get Started"}
+                        </Button>
                       </CardContent>
                       <Separator />
                       <CardFooter className="flex flex-col space-y-2 items-start justify-center">
@@ -457,7 +510,13 @@ export default function PricingPage() {
                       </CardHeader>
                       <CardContent>
                         <p className="text-sm">Advanced features + unlimited users.</p>
-                        <Button className="mt-8 w-full rounded-lg h-12 font-bold cursor-pointer">Get Started</Button>
+                        <Button
+                          className="mt-8 w-full rounded-lg h-12 font-bold cursor-pointer"
+                          onClick={() => handleCheckout("enterprise")}
+                          disabled={loadingPlan === "enterprise"}
+                        >
+                          {loadingPlan === "enterprise" ? "Redirecting..." : "Get Started"}
+                        </Button>
                       </CardContent>
                       <Separator />
                       <CardFooter className="flex flex-col space-y-2 items-start justify-center">

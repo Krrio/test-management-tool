@@ -1,12 +1,154 @@
+'use client';
+
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, Shield, Play, ChevronDown, Circle, CircleDot, ArrowBigRight, ArrowRight, ArrowDown } from "lucide-react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "@/app/home.css";
 
 const Hero = () => {
+  const heroRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    gsap.registerPlugin(ScrollTrigger);
+
+    const root = heroRef.current;
+    if (!root) {
+      return;
+    }
+
+    const ctx = gsap.context(() => {
+      const leftItems = gsap.utils.toArray<HTMLElement>(".hero-shape-left");
+      const rightItems = gsap.utils.toArray<HTMLElement>(".hero-shape-right");
+
+      if (!leftItems.length && !rightItems.length) {
+        return;
+      }
+
+      const offset = 160;
+      const wiggleAmplitude = 12;
+      let enterTimeline: gsap.core.Timeline | null = null;
+      let wiggleTweens: gsap.core.Tween[] = [];
+
+      const stopWiggles = () => {
+        wiggleTweens.forEach((tween) => tween.kill());
+        wiggleTweens = [];
+      };
+
+      const startWiggles = () => {
+        stopWiggles();
+
+        const createWiggle = (element: HTMLElement, direction: 1 | -1, index: number) => {
+          const tween = gsap
+            .timeline({
+              delay: index * 0.12,
+              repeat: -1,
+              yoyo: true,
+              defaults: {
+                duration: 2.6,
+                ease: "sine.inOut",
+                overwrite: "auto",
+              },
+            })
+            .to(element, { x: direction * wiggleAmplitude })
+            .to(element, { x: direction * -wiggleAmplitude });
+
+          wiggleTweens.push(tween);
+        };
+
+        leftItems.forEach((element, index) => createWiggle(element, 1, index));
+        rightItems.forEach((element, index) => createWiggle(element, -1, index));
+      };
+
+      const animateIn = () => {
+        stopWiggles();
+        enterTimeline?.kill();
+
+        enterTimeline = gsap.timeline({
+          onComplete: startWiggles,
+        });
+
+        enterTimeline.to(
+          leftItems,
+          {
+            x: 0,
+            opacity: 1,
+            duration: 0.9,
+            ease: "power3.out",
+            stagger: 0.12,
+            overwrite: "auto",
+          },
+          0
+        );
+
+        enterTimeline.to(
+          rightItems,
+          {
+            x: 0,
+            opacity: 1,
+            duration: 0.9,
+            ease: "power3.out",
+            stagger: 0.12,
+            overwrite: "auto",
+          },
+          0.1
+        );
+      };
+
+      const animateOut = () => {
+        stopWiggles();
+        enterTimeline?.kill();
+        enterTimeline = null;
+
+        gsap.to(leftItems, {
+          x: -offset,
+          opacity: 0,
+          duration: 0.7,
+          ease: "power2.in",
+          stagger: 0.1,
+          overwrite: "auto",
+        });
+        gsap.to(rightItems, {
+          x: offset,
+          opacity: 0,
+          duration: 0.7,
+          ease: "power2.in",
+          stagger: 0.1,
+          delay: 0.05,
+          overwrite: "auto",
+        });
+      };
+
+      gsap.set(leftItems, { x: -offset, opacity: 0 });
+      gsap.set(rightItems, { x: offset, opacity: 0 });
+
+      const trigger = ScrollTrigger.create({
+        trigger: root,
+        start: "top 80%",
+        end: "bottom top",
+        onEnter: animateIn,
+        onEnterBack: animateIn,
+        onLeave: animateOut,
+        onLeaveBack: animateOut,
+      });
+
+      return () => {
+        trigger.kill();
+        enterTimeline?.kill();
+        stopWiggles();
+      };
+    }, root);
+
+    return () => {
+      ctx.revert();
+    };
+  }, []);
+
   return (
-    <main className="relative h-[calc(100vh-4rem)] w-full overflow-hidden">
+    <main ref={heroRef} className="relative h-[calc(100vh-4rem)] w-full overflow-hidden">
       {/* Ambient background */}
       <div className="absolute inset-0 bg-[radial-gradient(1200px_500px_at_60%_20%,rgba(180,200,210,0.2),transparent),radial-gradient(700px_400px_at_20%_80%,rgba(160,200,255,0.12),transparent)]"></div>
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:24px_24px] opacity-10"></div>
@@ -78,10 +220,11 @@ const Hero = () => {
           <section className="relative z-10 mx-auto flex h-full max-w-4xl flex-col items-center justify-center text-center px-6">
             {/* small pill above title */}
             <Link href="/roadmap">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border bg-white/5 px-3 py-2 text-xs text-white/80 backdrop-blur">
-              <span className="inline-flex h-2 w-2 rounded-full bg-white/70 font-funky" /> Changelog
-              <ChevronRight className="size-3.5" />
-            </div>
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border bg-white/5 px-3 py-2 text-xs text-white/80 backdrop-blur">
+                <span className="hero-pulse-dot" aria-hidden />
+                Changelog
+                <ChevronRight className="size-3.5" />
+              </div>
             </Link>
 
 
@@ -127,7 +270,9 @@ const Hero = () => {
             <span className="block w-px h-[180%] bg-gradient-to-b from-transparent via-white/30 to-transparent line-flow" style={{ animationDelay: "1.2s" }} />
           </div>
           {/* Data markers anchored to each line */}
-          <div className="pointer-events-none absolute left-[226px] top-[210px] 2xl:top-[420px] hidden md:flex items-center gap-4 text-white/80">
+          <div
+            className="pointer-events-none absolute left-[226px] top-[210px] 2xl:top-[420px] hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-left"
+          >
             <div className="rounded-full border">
             <img
               src="/shape-1.png"
@@ -143,7 +288,9 @@ const Hero = () => {
               <span className="pl-4 text-[10px] sm:text-xs text-white/60">20.945</span>
             </div>
           </div>
-          <div className="pointer-events-none absolute left-[156px] top-[495px] 2xl:top-[835px]  hidden md:flex items-center gap-4 text-white/80">
+          <div
+            className="pointer-events-none absolute left-[156px] top-[495px] 2xl:top-[835px]  hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-left"
+          >
           <div className="rounded-full border">
             <img
               src="/shape-2.png"
@@ -159,7 +306,9 @@ const Hero = () => {
               <span className="pl-4 text-[10px] sm:text-xs text-white/60">19.346</span>
             </div>
           </div>
-          <div className="pointer-events-none absolute right-[176px] top-[210px] 2xl:top-[420px] hidden md:flex items-center gap-4 text-white/80">
+          <div
+            className="pointer-events-none absolute right-[176px] top-[210px] 2xl:top-[420px] hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-right"
+          >
             <div className="rounded-full border">
             <img
               src="/shape-3.png"
@@ -175,7 +324,9 @@ const Hero = () => {
               <span className="pr-4 text-[10px] sm:text-xs text-white/60">2,077</span>
             </div>
           </div>
-          <div className="pointer-events-none absolute right-[86px] top-[495px] 2xl:top-[835px]  hidden md:flex items-center gap-4 text-white/80">
+          <div
+            className="pointer-events-none absolute right-[86px] top-[495px] 2xl:top-[835px]  hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-right"
+          >
             <div className="rounded-full border">
             <img
               src="/shape-4.png"

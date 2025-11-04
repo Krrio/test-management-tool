@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog"
 import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash, ExternalLink, Loader2 } from "lucide-react"
 import Link from "next/link"
@@ -812,12 +813,13 @@ export default function TestCaseLabPage() {
             <>
               <span className={`inline-flex h-2 w-2 rounded-full ${jiraEnabled ? 'bg-emerald-400' : 'bg-destructive'}`} />
               <span className="uppercase tracking-wide">Jira</span>
-              <span className="text-muted-foreground group-hover:text-foreground transition-colors">
-                {jiraEnabled ? 'enabled' : 'disabled'}
-              </span>
-              {!jiraEnabled && (
-                <span className="text-foreground font-semibold">Enable</span>
-              )}
+              <span className="sr-only">Jira {jiraEnabled ? 'enabled' : 'disabled'}</span>
+              <Switch
+                aria-hidden="true"
+                checked={jiraEnabled}
+                disabled
+                className="pointer-events-none border border-border/10 bg-muted/90 transition-colors group-hover:bg-muted/30 data-[state=checked]:border-emerald-300/40 data-[state=checked]:bg-emerald-400"
+              />
             </>
           )}
         </button>
