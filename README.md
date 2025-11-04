@@ -29,6 +29,16 @@ PUSHER_APP_ID=
 NEXT_PUBLIC_PUSHER_KEY=
 PUSHER_SECRET=
 NEXT_PUBLIC_PUSHER_CLUSTER=eu
+
+# Stripe (opcjonalnie dla płatnych planów)
+STRIPE_SECRET_KEY=
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+STRIPE_PRICE_BASIC_MONTHLY=
+STRIPE_PRICE_BASIC_YEARLY=
+STRIPE_PRICE_BUSINESS_MONTHLY=
+STRIPE_PRICE_BUSINESS_YEARLY=
+STRIPE_PRICE_ENTERPRISE_MONTHLY=
+STRIPE_PRICE_ENTERPRISE_YEARLY=
 ```
 
 > Aplikacja korzysta z autoryzacji Clerk dla wszystkich tras (patrz `middleware.ts`). Brak poprawnej konfiguracji Clerk lub Pusher spowoduje brak dostepu do glownego UI lub wylaczenie funkcji czasu rzeczywistego.
@@ -92,6 +102,7 @@ Skrypt `scripts/seed.ts` wprowadza przykladowy projekt z folderu `lib/seed-data.
 - `GET /api/runs` - pobranie stanu krokow dla sekcji.
 - `PATCH /api/runs` - zapis statusu i komentarza kroku.
 - `POST /api/pusher/auth` - autoryzacja klienta Pusher (kanaly prywatne/presence).
+- `POST /api/stripe/checkout` - utworzenie sesji Stripe Checkout dla wybranego planu (wymaga konfiguracji kluczy Stripe).
 
 Kazdy endpoint wymaga poprawnej autoryzacji Clerk; operacje modyfikujace dodatkowo emituja event `structure-updated` lub `step-updated` do kanalu Pusher `presence-tmt`.
 
