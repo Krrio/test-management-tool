@@ -2,17 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  SignedIn,
-  SignedOut,
-  SignInButton,
-  SignUpButton,
-  UserButton,
-} from "@clerk/nextjs";
+import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
-import { Header } from "@/components/header";
 import Image from "next/image";
-import { Badge } from "./ui/badge";
+import { NotificationsBell } from "./notifications-bell";
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -38,7 +31,10 @@ export function SiteHeader() {
           </SignUpButton>
         </SignedOut>
         <SignedIn>
-          <UserButton />
+          <div className="flex items-center gap-2">
+            <NotificationsBell />
+            <UserButton afterSignOutUrl="/" />
+          </div>
         </SignedIn>
       </div>
     </header>

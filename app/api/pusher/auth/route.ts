@@ -45,6 +45,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
+  if (channelName.startsWith("private-notifications-")) {
+    const requestedUserId = channelName.slice("private-notifications-".length);
+    if (requestedUserId !== userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+
   const organizationId = extractOrganizationId(channelName);
   if (organizationId) {
     const membership = await ensureOrganizationAccess(userId, organizationId);
