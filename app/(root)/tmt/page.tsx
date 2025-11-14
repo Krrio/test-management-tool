@@ -7,8 +7,10 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog"
+import { NotificationsBell } from "@/components/notifications-bell"
 import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash, ExternalLink, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { SignedIn, UserButton } from "@clerk/nextjs"
 import { toast } from "@/components/ui/sonner"
 
 
@@ -1511,6 +1513,12 @@ export default function TestCaseLabPage() {
               <ArrowLeft className="size-4" />
               <span className="sr-only">Back</span>
             </Link>
+            <SignedIn>
+              <div className="flex items-center gap-2 pl-1">
+                <NotificationsBell />
+                <UserButton appearance={{ elements: { userButtonAvatarBox: "size-9" } }} afterSignOutUrl="/" />
+              </div>
+            </SignedIn>
           </div>
         </div>
       </div>

@@ -7,6 +7,24 @@ import {
   OrganizationJiraConfig,
   OrganizationJiraConfigDocument,
 } from "@/models/Organization";
+import { clerkClient } from "@clerk/nextjs/server";
+import { createNotification } from "./notifications";
+
+async function resolveUserDisplayName(id: string): Promise<string> {
+  try {
+    const user = await clerkClient.users.getUser(id);
+    const fullName = user.fullName?.trim();
+    if (fullName) return fullName;
+    const constructed = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+    if (constructed) return constructed;
+    if (user.username) return user.username;
+    const primaryEmail = user.primaryEmailAddress?.emailAddress;
+    if (primaryEmail) return primaryEmail;
+    return id;
+  } catch {
+    return id;
+  }
+}
 
 export type UserOrganization = {
   id: string;
@@ -93,6 +111,49 @@ export async function consumeInvitationToken({
   }
 
   await OrganizationInvitation.deleteOne({ token });
+
+  const organization = await Organization.findById(invite.organizationId).select({ name: 1 }).lean();
+  const organizationName = organization?.name ?? invite.organizationId;
+
+  const notificationsPayload: Array<Parameters<typeof createNotification>[0]> = [];
+
+  const inviterId = invite.invitedBy;
+  const [memberName, inviterName] = await Promise.all([
+    resolveUserDisplayName(userId),
+    resolveUserDisplayName(inviterId),
+  ]);
+
+  notificationsPayload.push(
+    {
+      userId,
+      type: "organization_joined",
+      title: `Joined ${organizationName}`,
+      body: inviterName
+        ? `You joined ${organizationName}. Invitation sent by ${inviterName}.`
+        : `You joined ${organizationName}.`,
+      organizationId: invite.organizationId,
+      actorId: inviterId,
+      metadata: {
+        organizationName,
+        inviterId,
+      },
+    },
+    {
+      userId: inviterId,
+      type: "organization_member_joined",
+      title: "New member joined",
+      body: `${memberName} joined ${organizationName}.`,
+      organizationId: invite.organizationId,
+      actorId: userId,
+      metadata: {
+        organizationName,
+        memberId: userId,
+      },
+    },
+  );
+
+  await Promise.allSettled(notificationsPayload.map((payload) => createNotification(payload)));
+
   return { organizationId: invite.organizationId, projectId: invite.projectId };
 }
 

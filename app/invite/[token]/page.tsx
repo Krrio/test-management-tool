@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 
 type InvitePageProps = {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 };
 
 type InviteStatus = "loading" | "success" | "error";
 
 export default function InviteAcceptPage({ params }: InvitePageProps) {
-  const { token } = params;
+  const { token } = use(params);
   const router = useRouter();
   const [status, setStatus] = useState<InviteStatus>("loading");
   const [message, setMessage] = useState<string>("Accepting invitation…");
