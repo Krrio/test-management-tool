@@ -5,12 +5,12 @@ import { createInvitationToken, ensureOrganizationAccess } from "@/lib/organizat
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { organizationId: string } }
+  context: { params: Promise<{ organizationId: string }> }
 ) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const organizationId = params.organizationId;
+  const { organizationId } = await context.params;
   if (!organizationId) return NextResponse.json({ error: "Organization id required" }, { status: 400 });
 
   const membership = await ensureOrganizationAccess(userId, organizationId);
@@ -40,4 +40,3 @@ export async function POST(
 
   return NextResponse.json({ token, expiresAt });
 }
-

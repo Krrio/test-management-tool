@@ -799,7 +799,7 @@ export default function TestCaseLabPage() {
           type="button"
           onClick={() => openJiraDialog(jiraEnabled ? undefined : { forceEnable: true })}
           disabled={jiraConfigLoading}
-          className={`group inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+          className={`group inline-flex items-center gap-2 rounded-full border px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
             jiraEnabled
               ? 'border-emerald-500/80 text-emerald-400 hover:bg-emerald-500/10'
               : 'border-destructive/60 text-destructive hover:bg-destructive/10'

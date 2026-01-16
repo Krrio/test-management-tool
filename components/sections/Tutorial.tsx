@@ -5,8 +5,7 @@ import { gsap } from "gsap";
 import SplitText from "gsap/SplitText";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Button } from "../ui/button";
-import { ArrowDown, ArrowRight } from "lucide-react";
-import VideoCarousel from "../ui/VideoCarousel";
+import { ArrowDown } from "lucide-react";
 
 gsap.registerPlugin(SplitText, ScrollTrigger);
 

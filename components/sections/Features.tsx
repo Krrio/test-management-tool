@@ -1,6 +1,6 @@
 import "@/app/home.css";
 import RotatingEarth from "../ui/wireframe-dotted-globe";
-import { ArrowRight, Info } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Marquee } from "../ui/marquee";
 import Image from "next/image";
 import { BookmarkIcon, CheckAllIcon, LinkIcon, TagIcon } from "@/public/svgs";
@@ -29,7 +29,7 @@ const Features = () => {
               Meet Marvelous Features
             </h1>
             <p className="text-gray-300/90 font-devis">
-              Save Your team's time and effort with our comprehensive test management tool.
+              Save Your team&apos;s time and effort with our comprehensive test management tool.
             </p>
 
             <div className="mt-20 grid grid-cols-3 grid-rows-3 gap-2 m-4 md:grid-cols-3 md:grid-rows-3 md:gap-2 max-w-5xl w-full h-[700px] mb-12">

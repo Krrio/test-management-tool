@@ -88,7 +88,7 @@ export default function Pricing_04() {
             </div>
 
             <div className="grid w-full grid-cols-1 lg:grid-cols-2 pt-8 lg:pt-12 gap-4 lg:gap-6 max-w-4xl mx-auto">
-                {PLANS.map((plan, idx) => (
+                {PLANS.map((plan) => (
                         <Plan key={plan.id} plan={plan} billPlan={billPlan} />
                 ))}
             </div>

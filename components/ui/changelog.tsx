@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import Image from "next/image";
 
 export type ChangelogEntry = {
   version: string;
@@ -126,9 +127,11 @@ const Changelog1 = ({
                   </ul>
                 )}
                 {entry.image && (
-                  <img
+                  <Image
                     src={entry.image}
                     alt={`${entry.version} visual`}
+                    width={1200}
+                    height={675}
                     className="mt-8 w-full rounded-lg object-cover"
                   />
                 )}

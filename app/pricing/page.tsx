@@ -1,12 +1,9 @@
 "use client"
 
 import { useCallback, useState } from "react"
-import Link from "next/link"
-import { ArrowDown, ArrowRight, Check, ChevronRight } from "lucide-react"
 import { LayoutGroup, motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import Pricing_04 from "@/components/ui/pricing-4"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import Image from "next/image"
 
@@ -23,174 +20,6 @@ import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Companies } from "@/components/socialproof"
 import { toast } from "@/components/ui/sonner"
-
-const PLAN_DATA = {
-  monthly: [
-    {
-      name: "Starter",
-      price: "$0",
-      cadence: "Free forever",
-      description: "Complete solution for your personal QA workflow.",
-      features: [
-        {
-          title: "Unlimited projects",
-          description: "Spin up as many workspaces as you need with shared modules.",
-        },
-        {
-          title: "Advanced project tracking",
-          description: "Monitor coverage with detailed analytics and dashboards.",
-        },
-        {
-          title: "Automated task management",
-          description: "Streamline execution with intelligent assignments.",
-        },
-        {
-          title: "Priority support",
-          description: "Get help faster with dedicated support channels.",
-        },
-      ],
-      cta: "Subscribe",
-      buttonHref: "/sign-up",
-      gradient: "from-purple-500 to-blue-500",
-    },
-    {
-      name: "Growth",
-      price: "$29",
-      cadence: "per month",
-      description: "Scalable collaboration for high-performing QA teams.",
-      features: [
-        {
-          title: "Unlimited team members",
-          description: "Scale without limits using shared workspaces and permissions.",
-        },
-        {
-          title: "Analytics dashboard",
-          description: "Gain deep insight with real-time reporting and trend analysis.",
-        },
-        {
-          title: "Workflow automation",
-          description: "Trigger actions with custom rules and CI integrations.",
-        },
-        {
-          title: "Dedicated success manager",
-          description: "Partner with experts for onboarding and best practices.",
-        },
-      ],
-      cta: "Start trial",
-      buttonHref: "/sign-up",
-      highlighted: true,
-    },
-    {
-      name: "Enterprise",
-      price: "$89",
-      cadence: "per month",
-      description: "Enterprise-grade security, governance and premium onboarding.",
-      features: [
-        {
-          title: "SSO & SCIM provisioning",
-          description: "Integrate identity and automate lifecycle management.",
-        },
-        {
-          title: "Custom roles & approvals",
-          description: "Control every change with tailored workflows and gates.",
-        },
-        {
-          title: "Dedicated environment",
-          description: "Deploy privately with guaranteed uptime SLAs.",
-        },
-        {
-          title: "Guided migration",
-          description: "Move legacy suites with white-glove support.",
-        },
-      ],
-      cta: "Contact us",
-      buttonHref: "/contact",
-    },
-  ],
-  yearly: [
-    {
-      name: "Starter",
-      price: "$0",
-      cadence: "Free forever",
-      description: "Complete solution for your personal QA workflow.",
-      features: [
-        {
-          title: "Unlimited projects",
-          description: "Spin up as many workspaces as you need with shared modules.",
-        },
-        {
-          title: "Advanced project tracking",
-          description: "Monitor coverage with detailed analytics and dashboards.",
-        },
-        {
-          title: "Automated task management",
-          description: "Streamline execution with intelligent assignments.",
-        },
-        {
-          title: "Priority support",
-          description: "Get help faster with dedicated support channels.",
-        },
-      ],
-      cta: "Subscribe",
-      buttonHref: "/sign-up",
-      gradient: "from-purple-500 to-blue-500",
-    },
-    {
-      name: "Growth",
-      price: "$299",
-      cadence: "per year",
-      description: "Scalable collaboration for high-performing QA teams.",
-      features: [
-        {
-          title: "Unlimited team members",
-          description: "Scale without limits using shared workspaces and permissions.",
-        },
-        {
-          title: "Analytics dashboard",
-          description: "Gain deep insight with real-time reporting and trend analysis.",
-        },
-        {
-          title: "Workflow automation",
-          description: "Trigger actions with custom rules and CI integrations.",
-        },
-        {
-          title: "Dedicated success manager",
-          description: "Partner with experts for onboarding and best practices.",
-        },
-      ],
-      cta: "Start trial",
-      buttonHref: "/sign-up",
-      highlighted: true,
-      savings: "Save 16%",
-    },
-    {
-      name: "Enterprise",
-      price: "Custom",
-      cadence: "Annual contract",
-      description: "Enterprise-grade security, governance and premium onboarding.",
-      features: [
-        {
-          title: "SSO & SCIM provisioning",
-          description: "Integrate identity and automate lifecycle management.",
-        },
-        {
-          title: "Custom roles & approvals",
-          description: "Control every change with tailored workflows and gates.",
-        },
-        {
-          title: "Dedicated environment",
-          description: "Deploy privately with guaranteed uptime SLAs.",
-        },
-        {
-          title: "Guided migration",
-          description: "Move legacy suites with white-glove support.",
-        },
-      ],
-      cta: "Contact us",
-      buttonHref: "/contact",
-    },
-  ],
-}
 
 const CADENCES = [
   { key: "monthly" as const, label: "Monthly billing" },
@@ -210,7 +39,7 @@ const CARD_PRICING = {
   },
 } as const
 
-type CadenceKey = keyof typeof PLAN_DATA
+type CadenceKey = (typeof CADENCES)[number]["key"]
 type CheckoutPlanKey = "basic" | "business" | "enterprise"
 
 export default function PricingPage() {
@@ -334,7 +163,14 @@ export default function PricingPage() {
                   <div className="flex flex-col items-start justify-center">
                     <div className="flex items-center text-sm font-semibold text-white">
                       {[...Array(5)].map((_, idx) => (
-                        <img key={idx} src="/star.svg" alt="star" className="h-4 w-4 invert" />
+                        <Image
+                          key={idx}
+                          src="/star.svg"
+                          alt="star"
+                          width={16}
+                          height={16}
+                          className="h-4 w-4 invert"
+                        />
                       ))}
                       <span className="font-devis ml-1">5.0</span>
                     </div>

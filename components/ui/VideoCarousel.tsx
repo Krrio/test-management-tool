@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
@@ -453,9 +454,12 @@ const VideoCarousel = () => {
               : () => handleProcess("pause")
           }
         >
-          <img
+          <Image
             src={isLastVideo ? replayImg : !isPlaying ? playImg : pauseImg}
             alt={isLastVideo ? "replay" : !isPlaying ? "play" : "pause"}
+            width={32}
+            height={32}
+            className="h-8 w-8"
           />
         </button>
       </div>

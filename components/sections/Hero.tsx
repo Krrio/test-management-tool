@@ -2,9 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, Shield, Play, ChevronDown, Circle, CircleDot, ArrowBigRight, ArrowRight, ArrowDown } from "lucide-react";
+import { ChevronRight, ArrowRight, ArrowDown } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "@/app/home.css";
@@ -185,28 +186,36 @@ const Hero = () => {
           </div>
 
           {/* Corner line overlays (PNG versions) */}
-          <img
+          <Image
             src="/Vector%201-2.png"
             alt=""
             aria-hidden
+            width={593}
+            height={158}
             className="pointer-events-none select-none absolute left-0 top-[110px] opacity-80 h-auto w-[200px] sm:w-[280px] md:w-[360px] lg:w-[480px] 2xl:w-[640px] hero-line 2xl:top-[280px]"
           />
-          <img
+          <Image
             src="/Vector%201.png"
             alt=""
             aria-hidden
+            width={593}
+            height={158}
             className="pointer-events-none select-none absolute left-0 top-[520px] opacity-80 h-auto w-[200px] sm:w-[280px] md:w-[360px] lg:w-[480px] 2xl:w-[640px] hero-line 2xl:top-[860px]"
           />
-          <img
+          <Image
             src="/Vector%201-3.png"
             alt=""
             aria-hidden
+            width={593}
+            height={158}
             className="pointer-events-none select-none absolute right-0 top-[110px] opacity-80 h-auto w-[200px] sm:w-[280px] md:w-[360px] lg:w-[480px] 2xl:w-[640px] hero-line 2xl:top-[280px]"
           />
-          <img
+          <Image
             src="/Vector%201-4.png"
             alt=""
             aria-hidden
+            width={593}
+            height={158}
             className="pointer-events-none select-none absolute right-0 top-[520px] opacity-80 h-auto w-[200px] sm:w-[280px] md:w-[360px] lg:w-[480px] 2xl:w-[640px] hero-line 2xl:top-[860px]"
           />
 
@@ -274,13 +283,15 @@ const Hero = () => {
             className="pointer-events-none absolute left-[226px] top-[210px] 2xl:top-[420px] hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-left"
           >
             <div className="rounded-full border">
-            <img
-              src="/shape-1.png"
-              alt=""
-              aria-hidden
-              className="h-[38px] w-[38px] sm:h-[44px] sm:w-[44px] lg:h-[52px] lg:w-[52px] opacity-90 drop-shadow-[0_0_12px_rgba(255,255,255,0.16)]"
-            />
-          </div>
+              <Image
+                src="/shape-1.png"
+                alt=""
+                aria-hidden
+                width={100}
+                height={100}
+                className="h-[38px] w-[38px] sm:h-[44px] sm:w-[44px] lg:h-[52px] lg:w-[52px] opacity-90 drop-shadow-[0_0_12px_rgba(255,255,255,0.16)]"
+              />
+            </div>
             <div className="flex flex-col text-left leading-tight">
               <div className="flex items-center gap-2 text-xs sm:text-sm font-medium font-devis">
                 <span className="inline-block size-1.5 rounded-full bg-white" /> Test Steps
@@ -291,14 +302,16 @@ const Hero = () => {
           <div
             className="pointer-events-none absolute left-[156px] top-[495px] 2xl:top-[835px]  hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-left"
           >
-          <div className="rounded-full border">
-            <img
-              src="/shape-2.png"
-              alt=""
-              aria-hidden
-              className="h-[38px] w-[38px] sm:h-[44px] sm:w-[44px] lg:h-[52px] lg:w-[52px] opacity-90 drop-shadow-[0_0_12px_rgba(255,255,255,0.16)]"
-            />
-          </div>
+            <div className="rounded-full border">
+              <Image
+                src="/shape-2.png"
+                alt=""
+                aria-hidden
+                width={100}
+                height={100}
+                className="h-[38px] w-[38px] sm:h-[44px] sm:w-[44px] lg:h-[52px] lg:w-[52px] opacity-90 drop-shadow-[0_0_12px_rgba(255,255,255,0.16)]"
+              />
+            </div>
             <div className="flex flex-col text-left leading-tight">
               <div className="flex items-center gap-2 text-xs sm:text-sm font-medium font-devis">
                 <span className="inline-block size-1.5 rounded-full bg-white" /> Sections
@@ -310,13 +323,15 @@ const Hero = () => {
             className="pointer-events-none absolute right-[176px] top-[210px] 2xl:top-[420px] hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-right"
           >
             <div className="rounded-full border">
-            <img
-              src="/shape-3.png"
-              alt=""
-              aria-hidden
-              className="h-[38px] w-[38px] sm:h-[44px] sm:w-[44px] lg:h-[52px] lg:w-[52px] opacity-90 drop-shadow-[0_0_12px_rgba(255,255,255,0.16)]"
-            />
-          </div>
+              <Image
+                src="/shape-3.png"
+                alt=""
+                aria-hidden
+                width={100}
+                height={100}
+                className="h-[38px] w-[38px] sm:h-[44px] sm:w-[44px] lg:h-[52px] lg:w-[52px] opacity-90 drop-shadow-[0_0_12px_rgba(255,255,255,0.16)]"
+              />
+            </div>
             <div className="flex flex-col text-right leading-tight">
               <div className="flex items-center justify-end gap-2 text-xs sm:text-sm font-medium font-devis">
                 Projects <span className="inline-block size-1.5 rounded-full bg-white" />
@@ -328,13 +343,15 @@ const Hero = () => {
             className="pointer-events-none absolute right-[86px] top-[495px] 2xl:top-[835px]  hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-right"
           >
             <div className="rounded-full border">
-            <img
-              src="/shape-4.png"
-              alt=""
-              aria-hidden
-              className="h-[38px] w-[38px] sm:h-[44px] sm:w-[44px] lg:h-[52px] lg:w-[52px] opacity-90 drop-shadow-[0_0_12px_rgba(255,255,255,0.16)]"
-            />
-          </div>
+              <Image
+                src="/shape-4.png"
+                alt=""
+                aria-hidden
+                width={100}
+                height={100}
+                className="h-[38px] w-[38px] sm:h-[44px] sm:w-[44px] lg:h-[52px] lg:w-[52px] opacity-90 drop-shadow-[0_0_12px_rgba(255,255,255,0.16)]"
+              />
+            </div>
             <div className="flex flex-col text-right leading-tight">
               <div className="flex items-center justify-end gap-2 text-xs sm:text-sm font-medium font-devis">
                 Modules <span className="inline-block size-1.5 rounded-full bg-white" />

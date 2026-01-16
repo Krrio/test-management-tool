@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Image from "next/image";
 import gsap from "gsap";
 import { Marquee } from "./ui/marquee";
 
@@ -33,11 +34,13 @@ export function Companies() {
           <div ref={containerRef} className="relative mt-6">
             <Marquee className="max-w-full [--duration:40s]">
               {companies.map((logo, idx) => (
-                <img
+                <Image
                   key={idx}
                   src={`https://cdn.magicui.design/companies/${logo}.svg`}
-                  className="h-10 w-28 mr-10 dark:brightness-0 dark:invert opacity-30"
                   alt={logo}
+                  width={112}
+                  height={40}
+                  className="company-logo h-10 w-28 mr-10 dark:brightness-0 dark:invert opacity-30"
                 />
               ))}
             </Marquee>

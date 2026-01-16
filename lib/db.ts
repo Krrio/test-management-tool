@@ -6,7 +6,6 @@ type MongooseCache = {
 };  
 
 declare global {
-  // eslint-disable-next-line no-var
   var _mongoose: MongooseCache | undefined;
 }
 
@@ -28,4 +27,3 @@ export async function connectDB() {
   cached.conn = await cached.promise;
   return cached.conn;
 }
-

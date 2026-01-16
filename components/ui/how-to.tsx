@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, type CSSProperties, type MouseEvent } from "react";
+import Image from "next/image";
 import LaserFlow from "../LaserFlow";
 
 type RevealImageStyle = CSSProperties & {
@@ -85,10 +86,12 @@ function HowTo() {
 
       <div style={overlayStyle}>{/* Your content here */}</div>
 
-      <img
+      <Image
         ref={revealImgRef}
         src="/path/to/image.jpg"
         alt="Reveal effect"
+        width={1920}
+        height={1080}
         style={defaultRevealImageStyle}
       />
     </div>

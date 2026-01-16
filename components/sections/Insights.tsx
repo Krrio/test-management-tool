@@ -1,9 +1,6 @@
-import Link from "next/link";
-import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, Shield, Play, ChevronDown, Circle, CircleDot, ArrowBigRight, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import "@/app/home.css";
-import HowTo from "../ui/how-to";
 import { InsightsFeatures } from "../ui/insights-component";
 
 const Insights = () => {
