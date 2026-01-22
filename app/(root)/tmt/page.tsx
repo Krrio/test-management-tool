@@ -280,6 +280,7 @@ export default function TestCaseLabPage() {
   const [creatingIssueFor, setCreatingIssueFor] = useState<string | null>(null)
   const [jiraErrors, setJiraErrors] = useState<Record<string, string>>({})
   const [inviteLoading, setInviteLoading] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [jiraConfig, setJiraConfig] = useState<OrganizationJiraConfig | null>(null)
   const [jiraConfigLoading, setJiraConfigLoading] = useState(false)
   const [jiraDialogOpen, setJiraDialogOpen] = useState(false)
@@ -1148,6 +1149,43 @@ export default function TestCaseLabPage() {
   }
 }
 
+  const handleExportResults = async () => {
+    if (!organizationId || !project) return
+    setExporting(true)
+    try {
+      const params = new URLSearchParams({
+        organizationId,
+        projectId: project.id,
+      })
+      const res = await fetch(`/api/runs/export?${params.toString()}`)
+      if (!res.ok) {
+        let message = "Failed to export results"
+        try {
+          const data = await res.json()
+          if (typeof data?.error === "string") message = data.error
+        } catch {}
+        throw new Error(message)
+      }
+      const blob = await res.blob()
+      const stamp = new Date().toISOString().slice(0, 10)
+      const baseName = slugify(project.name || "test-results")
+      const fileName = `${baseName || "test-results"}-${stamp}.xlsx`
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to export results"
+      toast.error(message)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
     const load = async () => {
@@ -1456,6 +1494,22 @@ export default function TestCaseLabPage() {
             placeholder="Search modules, sections, steps…"
             className="ml-3 flex-1 rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
           />
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            onClick={handleExportResults}
+            disabled={!project || exporting}
+          >
+            {exporting ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                Exporting...
+              </>
+            ) : (
+              "Export Excel"
+            )}
+          </Button>
           {canManageOrganization && (
             <Link href="/tmt/admin">
               <Button size="sm" className="shrink-0">+ add</Button>
@@ -1502,13 +1556,13 @@ export default function TestCaseLabPage() {
                 )}
               </button>
             )}
-            <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
+            {/* <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
               <span>{viewerCount || 0} viewing</span>
-            </div>
+            </div> */}
             <Link href="/" aria-label="Back to home" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
               <ArrowLeft className="size-4" />
               <span className="sr-only">Back</span>
