@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState } from "react"
+import { useTheme } from "next-themes"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
@@ -8,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog"
 import { NotificationsBell } from "@/components/notifications-bell"
-import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash, ExternalLink, Loader2 } from "lucide-react"
+import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash, ExternalLink, Loader2, Moon, Sun } from "lucide-react"
 import Link from "next/link"
 import { SignedIn, UserButton } from "@clerk/nextjs"
 import { toast } from "@/components/ui/sonner"
@@ -252,6 +253,8 @@ export default function TestCaseLabPage() {
   const [sectionId, setSectionId] = useState<string>("")
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [loadingRun, setLoadingRun] = useState(false)
+  const { theme, setTheme } = useTheme()
+  const [themeMounted, setThemeMounted] = useState(false)
 
   // runs: map from sectionKey -> map of stepId -> { status, comment? }
   const [runs, setRuns] = useState<Record<SectionRunKey, Record<string, StepRun>>>({})
@@ -294,6 +297,11 @@ export default function TestCaseLabPage() {
     issueType: "Task",
     apiToken: "",
   })
+  const isDarkMode = theme === "dark"
+
+  useEffect(() => {
+    setThemeMounted(true)
+  }, [])
 
   const loadOrganizations = useCallback(async () => {
     setLoadingOrganizations(true)
@@ -1530,6 +1538,18 @@ export default function TestCaseLabPage() {
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-3">
+            {themeMounted && (
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-card/60 px-2 py-1 text-xs text-muted-foreground">
+                <Sun className={`size-3.5 ${isDarkMode ? 'text-muted-foreground/50' : 'text-foreground'}`} />
+                <Switch
+                  aria-label="Toggle color theme"
+                  checked={isDarkMode}
+                  onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+                  className="border border-border/40 bg-muted/80 transition-colors data-[state=checked]:bg-foreground/70 data-[state=checked]:border-foreground/40"
+                />
+                <Moon className={`size-3.5 ${isDarkMode ? 'text-foreground' : 'text-muted-foreground/50'}`} />
+              </div>
+            )}
             {renderJiraBadge()}
             {canManageOrganization && (
               <button
