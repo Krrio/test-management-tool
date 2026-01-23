@@ -257,6 +257,10 @@ const headerMap: Record<string, string> = {
   stepid: "stepId",
   steptitle: "stepTitle",
   stepdescription: "stepDescription",
+  stepexpectedresults: "stepExpectedResults",
+  stepexpectedresult: "stepExpectedResults",
+  expectedresults: "stepExpectedResults",
+  expectedresult: "stepExpectedResults",
 };
 
 export type ExcelRow = Record<string, string>;

@@ -99,7 +99,7 @@ export async function addSection(input: { id: string; name: string } & ModuleIde
 }
 
 export async function addStep(
-  input: { id: string; title: string; description: string } & SectionIdentifiers
+  input: { id: string; title: string; description: string; expectedResults?: string } & SectionIdentifiers
 ) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
@@ -107,6 +107,7 @@ export async function addStep(
   const id = input.id.trim();
   const title = input.title.trim();
   const description = input.description.trim();
+  const expectedResults = input.expectedResults?.trim() ?? "";
   const { projectId, moduleId, sectionId, organizationId } = input;
   if (!id || !title || !description || !projectId || !moduleId || !sectionId || !organizationId) {
     throw new Error("Missing fields");
@@ -129,7 +130,7 @@ export async function addStep(
     throw new Error("Step exists");
   }
 
-  section.steps.push({ _id: id, title, description });
+  section.steps.push({ _id: id, title, description, expectedResults });
   await project.save();
   return { ok: true } as const;
 }

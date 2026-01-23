@@ -5,6 +5,7 @@ const StepSchema = new Schema(
     _id: { type: String, required: true },
     title: { type: String, required: true },
     description: { type: String, required: true },
+    expectedResults: { type: String, default: "" },
   },
   { _id: false }
 );
@@ -51,6 +52,7 @@ export type ProjectDocument = {
         _id: string;
         title: string;
         description: string;
+        expectedResults?: string;
       }>;
     }>;
   }>;

@@ -12,6 +12,7 @@ type UpdateStepPayload = {
   stepId?: string;
   title?: string;
   description?: string;
+  expectedResults?: string;
   organizationId?: string;
 };
 
@@ -34,7 +35,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { projectId, moduleId, sectionId, stepId, title, description, organizationId } = body || {};
+  const { projectId, moduleId, sectionId, stepId, title, description, expectedResults, organizationId } = body || {};
   if (!projectId || !moduleId || !sectionId || !stepId || !title || !description || !organizationId) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
@@ -55,6 +56,9 @@ export async function PATCH(req: NextRequest) {
 
   step.title = title;
   step.description = description;
+  if (typeof expectedResults === "string") {
+    step.expectedResults = expectedResults;
+  }
   await project.save();
 
   try {

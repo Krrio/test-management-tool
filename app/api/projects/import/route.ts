@@ -14,7 +14,7 @@ function ensureString(value: string | undefined, field: string, errors: string[]
   }
 }
 
-type StepPayload = { _id: string; title: string; description: string };
+type StepPayload = { _id: string; title: string; description: string; expectedResults: string };
 type SectionPayload = { _id: string; name: string; steps: StepPayload[]; stepSet: Set<string> };
 type ModulePayload = { _id: string; name: string; sections: SectionPayload[]; sectionMap: Map<string, SectionPayload> };
 type ProjectPayload = {
@@ -45,6 +45,7 @@ function aggregateRows(rows: ReturnType<typeof parseExcel>): Aggregated {
     const stepId = row.stepId?.trim();
     const stepTitle = row.stepTitle?.trim();
     const stepDescription = row.stepDescription?.trim();
+    const stepExpectedResults = row.stepExpectedResults?.trim() ?? "";
 
     ensureString(projectId, "projectId", errors, rowNumber);
     ensureString(projectName, "projectName", errors, rowNumber);
@@ -84,7 +85,12 @@ function aggregateRows(rows: ReturnType<typeof parseExcel>): Aggregated {
 
     if (!section.stepSet.has(stepId!)) {
       section.stepSet.add(stepId!);
-      section.steps.push({ _id: stepId!, title: stepTitle!, description: stepDescription! });
+      section.steps.push({
+        _id: stepId!,
+        title: stepTitle!,
+        description: stepDescription!,
+        expectedResults: stepExpectedResults,
+      });
       processedRows += 1;
     }
   });
@@ -107,6 +113,7 @@ function aggregateRows(rows: ReturnType<typeof parseExcel>): Aggregated {
           _id: step._id,
           title: step.title,
           description: step.description,
+          expectedResults: step.expectedResults,
         })),
       })),
     })),
