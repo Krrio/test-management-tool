@@ -1481,7 +1481,7 @@ export default function TestCaseLabPage() {
               size="sm"
               onClick={() => setOrganizationFormOpen((prev) => !prev)}
             >
-              {organizationFormOpen ? 'Cancel' : 'Create organization'}
+              {organizationFormOpen ? 'Cancel' : '+'}
             </Button>
           )}
           <Select value={projectId} onValueChange={handleSelectProject} disabled={!projects.length}>
