@@ -96,6 +96,15 @@ export async function POST(req: NextRequest) {
     ...step.description.split(/\r?\n/).map((line: string) => makeParagraph(line || undefined)),
   ];
 
+  const expectedResults =
+    typeof step.expectedResults === "string" ? step.expectedResults.trim() : "";
+  if (expectedResults) {
+    descriptionNodes.push(heading("Expected results"));
+    descriptionNodes.push(
+      ...expectedResults.split(/\r?\n/).map((line: string) => makeParagraph(line || undefined))
+    );
+  }
+
   if (comment) {
     descriptionNodes.push(heading("Tester comment"));
     descriptionNodes.push(...String(comment).split(/\r?\n/).map((line) => makeParagraph(line || undefined)));

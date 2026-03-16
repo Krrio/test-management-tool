@@ -15,7 +15,12 @@ function mapForProjectDoc() {
       sections: m.sections.map((s) => ({
         _id: s.id,
         name: s.name,
-        steps: s.steps.map((st) => ({ _id: st.id, title: st.title, description: st.description })),
+        steps: s.steps.map((st) => ({
+          _id: st.id,
+          title: st.title,
+          description: st.description,
+          expectedResults: st.expectedResults ?? "",
+        })),
       })),
     })),
   }));

@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { addModule, addSection, addStep, createProject } from "./actions";
 import { ArrowLeft } from "lucide-react";
 
-type Step = { id: string; title: string; description: string };
+type Step = { id: string; title: string; description: string; expectedResults?: string };
 type Section = { id: string; name: string; steps: Step[] };
 type Module = { id: string; name: string; sections: Section[] };
 type Project = { id: string; name: string; modules: Module[] };
@@ -20,7 +20,7 @@ type ApiProject = {
     sections?: Array<{
       _id: string;
       name: string;
-      steps?: Array<{ _id: string; title: string; description: string }>;
+      steps?: Array<{ _id: string; title: string; description: string; expectedResults?: string }>;
     }>;
   }>;
 };
@@ -35,7 +35,12 @@ const mapApiProjects = (items: ApiProject[]): Project[] =>
       sections: (m.sections ?? []).map((s) => ({
         id: s._id,
         name: s.name,
-        steps: (s.steps ?? []).map((st) => ({ id: st._id, title: st.title, description: st.description })),
+        steps: (s.steps ?? []).map((st) => ({
+          id: st._id,
+          title: st.title,
+          description: st.description,
+          expectedResults: st.expectedResults ?? "",
+        })),
       })),
     })),
   }));
@@ -417,7 +422,7 @@ function ImportForm({ organizationId, canManage, onSuccess }: { organizationId: 
       <div className="text-muted-foreground text-xs leading-5">
         Upload a spreadsheet (`.xlsx` or `.csv`) with columns:
         <span className="block mt-1 font-mono text-xs">
-          projectId, projectName, moduleId, moduleName, sectionId, sectionName, stepId, stepTitle, stepDescription
+          projectId, projectName, moduleId, moduleName, sectionId, sectionName, stepId, stepTitle, stepDescription, stepExpectedResults (optional)
         </span>
       </div>
       <label className="flex flex-col gap-2">
@@ -509,6 +514,7 @@ function StepForm({ organizationId, projectId, moduleId, sectionId, canManage, o
   const [id, setId] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [expectedResults, setExpectedResults] = useState("");
   const [error, setError] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const submit = async () => {
@@ -517,8 +523,8 @@ function StepForm({ organizationId, projectId, moduleId, sectionId, canManage, o
     if (!projectId || !moduleId || !sectionId) { setError('Select project, module and section'); return; }
     setSubmitting(true); setError("");
     try {
-      await addStep({ organizationId, projectId, moduleId, sectionId, id, title, description });
-      setId(""); setTitle(""); setDescription("");
+      await addStep({ organizationId, projectId, moduleId, sectionId, id, title, description, expectedResults });
+      setId(""); setTitle(""); setDescription(""); setExpectedResults("");
       await onSuccess();
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'Failed');
@@ -531,6 +537,7 @@ function StepForm({ organizationId, projectId, moduleId, sectionId, canManage, o
       <Field label="Step ID (slug)"><Input value={id} onChange={e => setId(e.target.value)} placeholder="so-1" disabled={!canManage || !projectId || !moduleId || !sectionId} /></Field>
       <Field label="Title"><Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Open Store" disabled={!canManage || !projectId || !moduleId || !sectionId} /></Field>
       <Field label="Description"><Textarea rows={4} value={description} onChange={e => setDescription(e.target.value)} placeholder="Open the store from the main menu" disabled={!canManage || !projectId || !moduleId || !sectionId} /></Field>
+      <Field label="Expected results"><Textarea rows={4} value={expectedResults} onChange={e => setExpectedResults(e.target.value)} placeholder="Store opens with correct offers" disabled={!canManage || !projectId || !moduleId || !sectionId} /></Field>
       <div className="flex gap-2">
         <Button onClick={submit} disabled={!canManage || !projectId || !moduleId || !sectionId || !id || !title || !description || submitting}>Add Step</Button>
         {error && <span className="text-destructive text-xs">{error}</span>}

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState } from "react"
+import { useTheme } from "next-themes"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
@@ -8,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog"
 import { NotificationsBell } from "@/components/notifications-bell"
-import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash, ExternalLink, Loader2 } from "lucide-react"
+import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash, ExternalLink, Loader2, Moon, Sun } from "lucide-react"
 import Link from "next/link"
 import { SignedIn, UserButton } from "@clerk/nextjs"
 import { toast } from "@/components/ui/sonner"
@@ -20,6 +21,7 @@ type TestStep = {
   id: string
   title: string
   description: string
+  expectedResults: string
 }
 
 type StepIssue = {
@@ -95,7 +97,7 @@ type ApiProject = {
     sections?: Array<{
       _id: string
       name: string
-      steps?: Array<{ _id: string; title: string; description: string }>
+      steps?: Array<{ _id: string; title: string; description: string; expectedResults?: string }>
     }>
   }>
 }
@@ -116,7 +118,12 @@ const mapApiProjects = (items: ApiProject[]): Project[] =>
       sections: (m.sections ?? []).map((s) => ({
         id: s._id,
         name: s.name,
-        steps: (s.steps ?? []).map((st) => ({ id: st._id, title: st.title, description: st.description })),
+        steps: (s.steps ?? []).map((st) => ({
+          id: st._id,
+          title: st.title,
+          description: st.description,
+          expectedResults: typeof st.expectedResults === 'string' ? st.expectedResults : '',
+        })),
       })),
     })),
   }))
@@ -252,6 +259,8 @@ export default function TestCaseLabPage() {
   const [sectionId, setSectionId] = useState<string>("")
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [loadingRun, setLoadingRun] = useState(false)
+  const { theme, setTheme } = useTheme()
+  const [themeMounted, setThemeMounted] = useState(false)
 
   // runs: map from sectionKey -> map of stepId -> { status, comment? }
   const [runs, setRuns] = useState<Record<SectionRunKey, Record<string, StepRun>>>({})
@@ -262,6 +271,7 @@ export default function TestCaseLabPage() {
   const [editingStepId, setEditingStepId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState<string>("")
   const [editDesc, setEditDesc] = useState<string>("")
+  const [editExpectedResults, setEditExpectedResults] = useState<string>("")
   const [editingCommentStepId, setEditingCommentStepId] = useState<string | null>(null)
   const [commentDraft, setCommentDraft] = useState<string>("")
   const [discardOpen, setDiscardOpen] = useState(false)
@@ -294,6 +304,11 @@ export default function TestCaseLabPage() {
     issueType: "Task",
     apiToken: "",
   })
+  const isDarkMode = theme === "dark"
+
+  useEffect(() => {
+    setThemeMounted(true)
+  }, [])
 
   const loadOrganizations = useCallback(async () => {
     setLoadingOrganizations(true)
@@ -574,7 +589,8 @@ export default function TestCaseLabPage() {
         for (const st of s.steps) {
           if (
             st.title.toLowerCase().includes(q) ||
-            st.description.toLowerCase().includes(q)
+            st.description.toLowerCase().includes(q) ||
+            st.expectedResults.toLowerCase().includes(q)
           )
             return true
         }
@@ -591,7 +607,8 @@ export default function TestCaseLabPage() {
       for (const st of s.steps) {
         if (
           st.title.toLowerCase().includes(q) ||
-          st.description.toLowerCase().includes(q)
+          st.description.toLowerCase().includes(q) ||
+          st.expectedResults.toLowerCase().includes(q)
         )
           return true
       }
@@ -850,6 +867,7 @@ export default function TestCaseLabPage() {
     setEditingStepId(st.id)
     setEditTitle(st.title)
     setEditDesc(st.description)
+    setEditExpectedResults(st.expectedResults ?? "")
   }
 
   const discardEdit = () => {
@@ -857,6 +875,7 @@ export default function TestCaseLabPage() {
     setEditingStepId(null)
     setEditTitle("")
     setEditDesc("")
+    setEditExpectedResults("")
   }
 
   const saveEdit = async () => {
@@ -869,6 +888,7 @@ export default function TestCaseLabPage() {
       stepId: editingStepId,
       title: editTitle.trim(),
       description: editDesc.trim(),
+      expectedResults: editExpectedResults.trim(),
     }
     if (!payload.title || !payload.description) return
     try {
@@ -891,7 +911,14 @@ export default function TestCaseLabPage() {
                 return {
                   ...s,
                   steps: s.steps.map((x) => (
-                    x.id === payload.stepId ? { ...x, title: payload.title, description: payload.description } : x
+                    x.id === payload.stepId
+                      ? {
+                          ...x,
+                          title: payload.title,
+                          description: payload.description,
+                          expectedResults: payload.expectedResults,
+                        }
+                      : x
                   )),
                 }
               })
@@ -1473,7 +1500,7 @@ export default function TestCaseLabPage() {
               size="sm"
               onClick={() => setOrganizationFormOpen((prev) => !prev)}
             >
-              {organizationFormOpen ? 'Cancel' : 'Create organization'}
+              {organizationFormOpen ? 'Cancel' : '+'}
             </Button>
           )}
           <Select value={projectId} onValueChange={handleSelectProject} disabled={!projects.length}>
@@ -1530,6 +1557,18 @@ export default function TestCaseLabPage() {
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-3">
+            {themeMounted && (
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-card/60 px-2 py-1 text-xs text-muted-foreground">
+                <Sun className={`size-3.5 ${isDarkMode ? 'text-muted-foreground/50' : 'text-foreground'}`} />
+                <Switch
+                  aria-label="Toggle color theme"
+                  checked={isDarkMode}
+                  onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+                  className="border border-border/40 bg-muted/80 transition-colors data-[state=checked]:bg-foreground/70 data-[state=checked]:border-foreground/40"
+                />
+                <Moon className={`size-3.5 ${isDarkMode ? 'text-foreground' : 'text-muted-foreground/50'}`} />
+              </div>
+            )}
             {renderJiraBadge()}
             {canManageOrganization && (
               <button
@@ -1824,11 +1863,12 @@ export default function TestCaseLabPage() {
                 {loadingRun && (
                   <div className="text-xs text-muted-foreground">Loading…</div>
                 )}
-                {(q ? sortedSteps(activeSection).filter((st) => st.title.toLowerCase().includes(q) || st.description.toLowerCase().includes(q)) : sortedSteps(activeSection)).map((step, idx) => {
+                {(q ? sortedSteps(activeSection).filter((st) => st.title.toLowerCase().includes(q) || st.description.toLowerCase().includes(q) || st.expectedResults.toLowerCase().includes(q)) : sortedSteps(activeSection)).map((step, idx) => {
                   const s = getStepStatus(sectionKey, step.id)
                   const issue = getStepIssue(sectionKey, step.id)
                   const issueCreatedAt = issue?.createdAt ? new Date(issue.createdAt).toLocaleString() : undefined
                   const displayNum = stepSort === "asc" ? idx + 1 : activeSection.steps.length - idx
+                  const isEditing = editingStepId === step.id
                   return (
                     <div key={step.id} className="group relative rounded-md border p-4">
                       {/* Status badge in top-right corner */}
@@ -1838,7 +1878,7 @@ export default function TestCaseLabPage() {
 
                       <div className="mb-2 flex items-center justify-between gap-3 pr-12">
                         <div className="font-medium">
-                          {editingStepId === step.id ? (
+                          {isEditing ? (
                             <input
                               value={editTitle}
                               onChange={(e) => setEditTitle(e.target.value)}
@@ -1850,22 +1890,45 @@ export default function TestCaseLabPage() {
                           )}
                         </div>
                       </div>
-                      <div className="mb-3 text-sm text-muted-foreground">
-                        {editingStepId === step.id ? (
-                          <textarea
-                            value={editDesc}
-                            onChange={(e) => setEditDesc(e.target.value)}
-                            rows={3}
-                            className="w-full rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                            placeholder="Step description"
-                          />
-                        ) : (
-                          <div onDoubleClick={() => startEdit(step)} className="cursor-text">
-                            {step.description}
-                          </div>
-                        )}
+                      <div className="mb-3 text-sm">
+                        <div className="text-xs font-medium text-muted-foreground">Description</div>
+                        <div className="mt-1 text-muted-foreground">
+                          {isEditing ? (
+                            <textarea
+                              value={editDesc}
+                              onChange={(e) => setEditDesc(e.target.value)}
+                              rows={3}
+                              className="w-full rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                              placeholder="Step description"
+                            />
+                          ) : (
+                            <div onDoubleClick={() => startEdit(step)} className="cursor-text">
+                              {step.description}
+                            </div>
+                          )}
+                        </div>
+                        <div className="mt-3 text-xs font-medium text-muted-foreground">Expected results</div>
+                        <div className="mt-1 text-muted-foreground">
+                          {isEditing ? (
+                            <textarea
+                              value={editExpectedResults}
+                              onChange={(e) => setEditExpectedResults(e.target.value)}
+                              rows={3}
+                              className="w-full rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                              placeholder="Expected results"
+                            />
+                          ) : (
+                            <div onDoubleClick={() => startEdit(step)} className="cursor-text min-h-[1.25rem]">
+                              {step.expectedResults ? (
+                                step.expectedResults
+                              ) : (
+                                <span className="text-muted-foreground/60 italic">No expected results</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      {editingStepId === step.id && (
+                      {isEditing && (
                         <div className="mb-3 flex items-center gap-2">
                           <Button size="sm" onClick={saveEdit}>Save</Button>
                           <Button size="sm" variant="outline" onClick={() => setDiscardOpen(true)}>Discard</Button>

@@ -1,4 +1,4 @@
-export type DemoStep = { id: string; title: string; description: string };
+export type DemoStep = { id: string; title: string; description: string; expectedResults?: string };
 export type DemoSection = { id: string; name: string; steps: DemoStep[] };
 export type DemoModule = { id: string; name: string; sections: DemoSection[] };
 export type DemoProject = { id: string; name: string; modules: DemoModule[] };
@@ -67,4 +67,3 @@ export const demoProjects: DemoProject[] = [
     ],
   },
 ];
-
