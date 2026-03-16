@@ -261,9 +261,9 @@ const Hero = () => {
                 </Link>
               </SignedOut>
               <Link href="/pricing">
-                <Button className="rounded-full z-20 px-6 h-[44px] w-[132px] bg-black! border border-white/10 hover:bg-white/10 cursor-pointer font-devis" size="lg" variant="outline">
+                {/* <Button className="rounded-full z-20 px-6 h-[44px] w-[132px] bg-black! border border-white/10 hover:bg-white/10 cursor-pointer font-devis" size="lg" variant="outline">
                   Pricing
-                </Button>
+                </Button> */}
               </Link>
             </div>
           </section>
