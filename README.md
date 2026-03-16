@@ -258,3 +258,12 @@ Kazdy endpoint wymaga poprawnej autoryzacji Clerk; operacje modyfikujace dodatko
 - `npm run start` - start servera produkcyjnego.
 - `npm run lint` - eslint.
 - `npm run seed` - zaladowanie danych demo do MongoDB.
+
+
+# Test Management Tool
+
+Open-source test management system.
+
+Author: Kacper Jozwik
+
+License: GNU Affero General Public License v3.0

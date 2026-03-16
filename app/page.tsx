@@ -13,14 +13,14 @@ export default function Home() {
     <>
       <SmoothScqroolProvider />
       <Hero />
-      <div className="my-6 w-full">
+      {/* <div className="my-6 w-full">
         <Companies />
       </div>
       <Features />
       <Insights />
       <Tutorial />
       <Highlights />
-      <Footer />
+      <Footer /> */}
     </>
   );
 }
