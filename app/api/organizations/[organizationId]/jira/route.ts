@@ -21,12 +21,12 @@ const serializeConfig = (config: Awaited<ReturnType<typeof getOrganizationJiraCo
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { organizationId: string } },
+  { params }: { params: Promise<{ organizationId: string }> },
 ) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const organizationId = params.organizationId;
+  const { organizationId } = await params;
   if (!organizationId) {
     return NextResponse.json({ error: "Organization id required" }, { status: 400 });
   }
@@ -42,18 +42,19 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: { organizationId: string } },
+  { params }: { params: Promise<{ organizationId: string }> },
 ) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const organizationId = params.organizationId;
+  const { organizationId } = await params;
   if (!organizationId) {
     return NextResponse.json({ error: "Organization id required" }, { status: 400 });
   }
 
   const membership = await ensureOrganizationAccess(userId, organizationId);
-  if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+  const role = (membership as { role?: string } | null)?.role;
+  if (!membership || (role !== "owner" && role !== "admin")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

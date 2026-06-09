@@ -1,8 +1,13 @@
 import { connectDB } from "./db";
 import {
   Organization,
+  OrganizationClickUpConfig,
+  OrganizationClickUpConfigDocument,
+  OrganizationDocument,
   OrganizationInvitation,
+  OrganizationInvitationDocument,
   OrganizationMember,
+  OrganizationMemberDocument,
   OrganizationRole,
   OrganizationJiraConfig,
   OrganizationJiraConfigDocument,
@@ -12,7 +17,8 @@ import { createNotification } from "./notifications";
 
 async function resolveUserDisplayName(id: string): Promise<string> {
   try {
-    const user = await clerkClient.users.getUser(id);
+    const client = await clerkClient();
+    const user = await client.users.getUser(id);
     const fullName = user.fullName?.trim();
     if (fullName) return fullName;
     const constructed = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
@@ -34,12 +40,12 @@ export type UserOrganization = {
 
 export async function listOrganizationsForUser(userId: string) {
   await connectDB();
-  const memberships = await OrganizationMember.find({ userId }).lean();
+  const memberships = await OrganizationMember.find({ userId }).lean<OrganizationMemberDocument[]>();
   if (!memberships.length) return [] as UserOrganization[];
 
   const organizations = await Organization.find({ _id: { $in: memberships.map((m) => m.organizationId) } })
     .select({ _id: 1, name: 1, ownerId: 1 })
-    .lean();
+    .lean<OrganizationDocument[]>();
 
   return organizations.map((org) => {
     const membership = memberships.find((m) => m.organizationId === org._id);
@@ -50,8 +56,9 @@ export async function listOrganizationsForUser(userId: string) {
 
 export async function ensureOrganizationAccess(userId: string, organizationId: string) {
   await connectDB();
-  const membership = await OrganizationMember.findOne({ organizationId, userId }).lean();
-  return membership;
+  const membership = await OrganizationMember.findOne({ organizationId, userId })
+    .lean<OrganizationMemberDocument | null>();
+  return membership ?? null;
 }
 
 export async function createOrganization({
@@ -101,18 +108,21 @@ export async function consumeInvitationToken({
   userId: string;
 }) {
   await connectDB();
-  const invite = await OrganizationInvitation.findOne({ token }).lean();
+  const invite = await OrganizationInvitation.findOne({ token }).lean<OrganizationInvitationDocument | null>();
   if (!invite) throw new Error("Invitation not found");
   if (invite.expiresAt < new Date()) throw new Error("Invitation expired");
 
-  const membership = await OrganizationMember.findOne({ organizationId: invite.organizationId, userId }).lean();
+  const membership = await OrganizationMember.findOne({ organizationId: invite.organizationId, userId })
+    .lean<OrganizationMemberDocument | null>();
   if (!membership) {
     await OrganizationMember.create({ organizationId: invite.organizationId, userId, role: "member" });
   }
 
   await OrganizationInvitation.deleteOne({ token });
 
-  const organization = await Organization.findById(invite.organizationId).select({ name: 1 }).lean();
+  const organization = await Organization.findById(invite.organizationId)
+    .select({ name: 1 })
+    .lean<Pick<OrganizationDocument, "name"> | null>();
   const organizationName = organization?.name ?? invite.organizationId;
 
   const notificationsPayload: Array<Parameters<typeof createNotification>[0]> = [];
@@ -158,6 +168,7 @@ export async function consumeInvitationToken({
 }
 
 export type OrganizationJiraConfigRecord = OrganizationJiraConfigDocument | null;
+export type OrganizationClickUpConfigRecord = OrganizationClickUpConfigDocument | null;
 
 export async function getOrganizationJiraConfig(organizationId: string): Promise<OrganizationJiraConfigRecord> {
   if (!organizationId) return null;
@@ -219,5 +230,66 @@ export async function updateOrganizationJiraConfig(
     throw new Error("Failed to update Jira configuration");
   }
 
-  return doc;
+  return doc as unknown as OrganizationJiraConfigDocument;
+}
+
+export async function getOrganizationClickUpConfig(
+  organizationId: string,
+): Promise<OrganizationClickUpConfigRecord> {
+  if (!organizationId) return null;
+  await connectDB();
+  const config = await OrganizationClickUpConfig.findOne({ organizationId })
+    .lean<OrganizationClickUpConfigDocument | null>();
+  return config ?? null;
+}
+
+export async function updateOrganizationClickUpConfig(
+  organizationId: string,
+  updates: {
+    enabled?: boolean;
+    listId?: string;
+    status?: string;
+    apiToken?: string | null;
+    updatedBy?: string;
+  },
+): Promise<OrganizationClickUpConfigDocument> {
+  if (!organizationId) {
+    throw new Error("Organization id is required to update ClickUp configuration");
+  }
+
+  await connectDB();
+
+  const set: Record<string, unknown> = {};
+  if (typeof updates.enabled === "boolean") set.enabled = updates.enabled;
+  if (typeof updates.listId === "string") set.listId = updates.listId;
+  if (typeof updates.status === "string") set.status = updates.status;
+  if (updates.updatedBy !== undefined) set.updatedBy = updates.updatedBy;
+  if (updates.apiToken !== undefined) {
+    if (updates.apiToken === null) {
+      set.apiToken = null;
+    } else if (updates.apiToken !== "") {
+      set.apiToken = updates.apiToken;
+    }
+  }
+
+  const doc = await OrganizationClickUpConfig.findOneAndUpdate(
+    { organizationId },
+    {
+      $set: set,
+      $setOnInsert: { organizationId },
+    },
+    {
+      upsert: true,
+      new: true,
+      runValidators: true,
+      setDefaultsOnInsert: true,
+      lean: true,
+    },
+  );
+
+  if (!doc) {
+    throw new Error("Failed to update ClickUp configuration");
+  }
+
+  return doc as unknown as OrganizationClickUpConfigDocument;
 }

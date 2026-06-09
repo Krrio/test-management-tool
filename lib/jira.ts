@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 
-type JiraConfig = {
+export type JiraConfig = {
   baseUrl: string;
   email: string;
   token: string;
@@ -23,6 +23,7 @@ export type JiraIssue = {
 };
 
 type CreateIssueOptions = {
+  config?: JiraConfig;
   summary: string;
   description: JiraDescriptionDoc;
   labels?: string[];
@@ -70,8 +71,8 @@ export const makeParagraph = (text?: string, opts?: { boldLabel?: string }): Jir
 };
 
 export async function createJiraIssue(options: CreateIssueOptions): Promise<JiraIssue> {
-  const { summary, description, labels, priorityId, extraFields } = options;
-  const { baseUrl, email, token, projectKey, issueType } = getConfig();
+  const { config = getConfig(), summary, description, labels, priorityId, extraFields } = options;
+  const { baseUrl, email, token, projectKey, issueType } = config;
 
   const auth = Buffer.from(`${email}:${token}`).toString("base64");
   const fields: Record<string, unknown> = {

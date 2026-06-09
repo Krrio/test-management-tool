@@ -52,6 +52,18 @@ const OrganizationJiraConfigSchema = new Schema(
   { timestamps: true }
 );
 
+const OrganizationClickUpConfigSchema = new Schema(
+  {
+    organizationId: { type: String, required: true, unique: true },
+    enabled: { type: Boolean, default: false },
+    listId: { type: String, default: "" },
+    status: { type: String, default: "" },
+    apiToken: { type: String, default: null },
+    updatedBy: { type: String, default: null },
+  },
+  { timestamps: true }
+);
+
 export type OrganizationDocument = {
   _id: string;
   name: string;
@@ -86,6 +98,17 @@ export type OrganizationJiraConfigDocument = {
   updatedAt?: Date;
 };
 
+export type OrganizationClickUpConfigDocument = {
+  organizationId: string;
+  enabled: boolean;
+  listId?: string;
+  status?: string;
+  apiToken?: string | null;
+  updatedBy?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
 export const Organization = models.Organization || model<OrganizationDocument>("Organization", OrganizationSchema);
 export const OrganizationMember =
   models.OrganizationMember || model<OrganizationMemberDocument>("OrganizationMember", OrganizationMemberSchema);
@@ -95,3 +118,6 @@ export const OrganizationInvitation =
 export const OrganizationJiraConfig =
   models.OrganizationJiraConfig ||
   model<OrganizationJiraConfigDocument>("OrganizationJiraConfig", OrganizationJiraConfigSchema);
+export const OrganizationClickUpConfig =
+  models.OrganizationClickUpConfig ||
+  model<OrganizationClickUpConfigDocument>("OrganizationClickUpConfig", OrganizationClickUpConfigSchema);

@@ -9,6 +9,14 @@ type StepStatus = "untested" | "passed" | "failed" | "blocked";
 
 type StoredStepRun = {
   comment?: string;
+  externalTask?: {
+    provider?: "jira" | "clickup";
+    key?: string;
+    id?: string;
+    url?: string;
+    createdAt?: string | Date;
+    createdBy?: string;
+  };
   jiraIssue?: {
     key?: string;
     id?: string;
@@ -26,6 +34,18 @@ type UpdatePayload = {
   stepId?: string;
   status?: StepStatus;
   comment?: string;
+};
+
+const normalizeTask = (
+  value: StoredStepRun["externalTask"] | StoredStepRun["jiraIssue"] | undefined,
+  fallbackProvider?: "jira" | "clickup",
+) => {
+  if (!value?.key) return undefined;
+  return {
+    ...value,
+    provider: "provider" in value ? value.provider ?? fallbackProvider : fallbackProvider,
+    createdAt: value.createdAt ? new Date(value.createdAt).toISOString() : undefined,
+  };
 };
 
 export async function GET(req: NextRequest) {
@@ -71,33 +91,25 @@ export async function PATCH(req: NextRequest) {
   if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const now = new Date();
-  const update = {
-    $set: {
-      [`steps.${stepId}`]: {
-        status,
-        comment: typeof comment === "string" ? comment : undefined,
-        updatedBy: userId,
-        updatedAt: now,
-      },
-    },
-  } as const;
+  const set: Record<string, unknown> = {
+    [`steps.${stepId}.status`]: status,
+    [`steps.${stepId}.updatedBy`]: userId,
+    [`steps.${stepId}.updatedAt`]: now,
+  };
+  if (typeof comment === "string") {
+    set[`steps.${stepId}.comment`] = comment;
+  }
 
   const run = await Run.findOneAndUpdate(
     { organizationId, projectId, moduleId, sectionId },
-    update,
+    { $set: set },
     { upsert: true, new: true, setDefaultsOnInsert: true }
-  ).lean();
+  ).lean<{ steps?: Record<string, StoredStepRun> } | null>();
 
   const steps = (run?.steps as Record<string, StoredStepRun>) ?? {};
   const stepState = steps[stepId] ?? {};
-  const jiraIssue = stepState.jiraIssue
-    ? {
-        ...stepState.jiraIssue,
-        createdAt: stepState.jiraIssue.createdAt
-          ? new Date(stepState.jiraIssue.createdAt).toISOString()
-          : undefined,
-      }
-    : undefined;
+  const externalTask = normalizeTask(stepState.externalTask);
+  const jiraIssue = normalizeTask(stepState.jiraIssue, "jira");
 
   try {
     const pusher = getPusher();
@@ -106,6 +118,7 @@ export async function PATCH(req: NextRequest) {
       stepId,
       status,
       comment: typeof comment === "string" ? comment : stepState.comment,
+      externalTask,
       jiraIssue,
       updatedBy: userId,
       updatedAt: now.toISOString(),
@@ -119,6 +132,7 @@ export async function PATCH(req: NextRequest) {
       stepId,
       status,
       comment: typeof comment === "string" ? comment : stepState.comment,
+      externalTask,
       jiraIssue,
       updatedBy: userId,
       updatedAt: now.toISOString(),

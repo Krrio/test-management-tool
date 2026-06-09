@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { connectDB } from "@/lib/db";
 import { ensureOrganizationAccess } from "@/lib/organizations";
-import { Project } from "@/models/Project";
+import { Project, ProjectDocument } from "@/models/Project";
 import { Run } from "@/models/Run";
 import { buildXlsx } from "@/lib/xlsx-export";
 
@@ -15,6 +15,13 @@ type StoredStepRun = {
   comment?: string;
   updatedBy?: string;
   updatedAt?: string | Date;
+  externalTask?: {
+    provider?: "jira" | "clickup";
+    key?: string;
+    url?: string;
+    createdAt?: string | Date;
+    createdBy?: string;
+  };
   jiraIssue?: {
     key?: string;
     url?: string;
@@ -57,7 +64,7 @@ export async function GET(req: NextRequest) {
   const membership = await ensureOrganizationAccess(userId, organizationId);
   if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const project = await Project.findOne({ _id: projectId, organizationId }).lean();
+  const project = await Project.findOne({ _id: projectId, organizationId }).lean<ProjectDocument | null>();
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
@@ -87,6 +94,11 @@ export async function GET(req: NextRequest) {
       "stepExpectedResults",
       "status",
       "comment",
+      "externalProvider",
+      "externalKey",
+      "externalUrl",
+      "externalCreatedAt",
+      "externalCreatedBy",
       "jiraKey",
       "jiraUrl",
       "jiraCreatedAt",
@@ -102,6 +114,17 @@ export async function GET(req: NextRequest) {
       const steps = runIndex.get(runKey) ?? {};
       for (const step of section.steps ?? []) {
         const stepRun = steps[step._id] ?? {};
+        const externalTask = stepRun.externalTask ?? (
+          stepRun.jiraIssue
+            ? {
+                provider: "jira" as const,
+                key: stepRun.jiraIssue.key,
+                url: stepRun.jiraIssue.url,
+                createdAt: stepRun.jiraIssue.createdAt,
+                createdBy: stepRun.jiraIssue.createdBy,
+              }
+            : undefined
+        );
         rows.push([
           String(project._id ?? ""),
           String(project.name ?? ""),
@@ -115,6 +138,11 @@ export async function GET(req: NextRequest) {
           String(step.expectedResults ?? ""),
           String(stepRun.status ?? "untested"),
           String(stepRun.comment ?? ""),
+          String(externalTask?.provider ?? ""),
+          String(externalTask?.key ?? ""),
+          String(externalTask?.url ?? ""),
+          String(toIsoString(externalTask?.createdAt)),
+          String(externalTask?.createdBy ?? ""),
           String(stepRun.jiraIssue?.key ?? ""),
           String(stepRun.jiraIssue?.url ?? ""),
           String(toIsoString(stepRun.jiraIssue?.createdAt)),
@@ -131,7 +159,7 @@ export async function GET(req: NextRequest) {
   const baseName = sanitizeFileName(project.name || String(project._id || "results"));
   const fileName = `${baseName || "results"}-${stamp}.xlsx`;
 
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${fileName}"`,
