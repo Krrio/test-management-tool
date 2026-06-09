@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 
 import { connectDB } from "@/lib/db";
-import { Project } from "@/models/Project";
+import { Project, ProjectDocument } from "@/models/Project";
 import { Run } from "@/models/Run";
 import { buildDescriptionDoc, createJiraIssue, makeParagraph, JiraDocNode, JiraIssue } from "@/lib/jira";
 import { getPusher } from "@/lib/pusher-server";
-import { ensureOrganizationAccess } from "@/lib/organizations";
+import { ensureOrganizationAccess, getOrganizationJiraConfig } from "@/lib/organizations";
 
 const heading = (text: string): JiraDocNode => ({
   type: "heading",
@@ -20,6 +20,14 @@ type StoredStepRun = {
   status?: StepStatus;
   comment?: string;
   jiraIssue?: {
+    key?: string;
+    id?: string;
+    url?: string;
+    createdAt?: string | Date;
+    createdBy?: string;
+  };
+  externalTask?: {
+    provider?: "jira";
     key?: string;
     id?: string;
     url?: string;
@@ -62,7 +70,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const project = await Project.findOne({ _id: projectId, organizationId }).lean();
+  const project = await Project.findOne({ _id: projectId, organizationId }).lean<ProjectDocument | null>();
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 });
   }
@@ -77,6 +85,14 @@ export async function POST(req: NextRequest) {
   const step = section.steps.find((s) => s._id === stepId);
   if (!step) {
     return NextResponse.json({ error: "Step not found" }, { status: 404 });
+  }
+
+  const jiraConfig = await getOrganizationJiraConfig(organizationId);
+  if (!jiraConfig?.enabled) {
+    return NextResponse.json({ error: "Jira integration is disabled for this organization." }, { status: 400 });
+  }
+  if (!jiraConfig.baseUrl || !jiraConfig.email || !jiraConfig.apiToken || !jiraConfig.projectKey) {
+    return NextResponse.json({ error: "Jira integration is incomplete." }, { status: 400 });
   }
 
   const pathLabel = [project.name, projectModule.name, section.name, step.title].filter(Boolean).join(" / ");
@@ -113,6 +129,13 @@ export async function POST(req: NextRequest) {
   let issue: JiraIssue;
   try {
     issue = await createJiraIssue({
+      config: {
+        baseUrl: jiraConfig.baseUrl.replace(/\/+$/, ""),
+        email: jiraConfig.email,
+        token: jiraConfig.apiToken,
+        projectKey: jiraConfig.projectKey,
+        issueType: jiraConfig.issueType || "Task",
+      },
       summary,
       description: buildDescriptionDoc(descriptionNodes),
       labels: ["tmt", "automation"],
@@ -130,24 +153,37 @@ export async function POST(req: NextRequest) {
     createdAt: now,
     createdBy: userId,
   };
+  const externalTaskDetails = {
+    provider: "jira" as const,
+    ...jiraIssueDetails,
+  };
 
   const run = await Run.findOneAndUpdate(
     { organizationId, projectId, moduleId, sectionId },
     {
       $set: {
         [`steps.${stepId}.jiraIssue`]: jiraIssueDetails,
+        [`steps.${stepId}.externalTask`]: externalTaskDetails,
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
-  ).lean();
+  ).lean<{ steps?: Record<string, StoredStepRun> } | null>();
 
   const steps = (run?.steps as Record<string, StoredStepRun>) ?? {};
   const stepRun = steps[stepId] ?? {};
   const payloadIssue = stepRun.jiraIssue ?? jiraIssueDetails;
+  const payloadExternalTask = stepRun.externalTask ?? externalTaskDetails;
   const normalizedIssue = payloadIssue
     ? {
         ...payloadIssue,
         createdAt: payloadIssue.createdAt ? new Date(payloadIssue.createdAt).toISOString() : now.toISOString(),
+      }
+    : undefined;
+  const normalizedExternalTask = payloadExternalTask
+    ? {
+        ...payloadExternalTask,
+        provider: "jira" as const,
+        createdAt: payloadExternalTask.createdAt ? new Date(payloadExternalTask.createdAt).toISOString() : now.toISOString(),
       }
     : undefined;
 
@@ -156,6 +192,7 @@ export async function POST(req: NextRequest) {
     stepId,
     status,
     comment: typeof stepRun.comment === "string" ? stepRun.comment : undefined,
+    externalTask: normalizedExternalTask,
     jiraIssue: normalizedIssue,
     updatedAt: stepRun.updatedAt ? new Date(stepRun.updatedAt).toISOString() : undefined,
     updatedBy: stepRun.updatedBy ?? userId,
@@ -176,9 +213,11 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     issue: normalizedIssue,
+    task: normalizedExternalTask,
     stepRun: {
       status,
       comment: payload.comment,
+      externalTask: normalizedExternalTask,
       jiraIssue: normalizedIssue,
     },
   });

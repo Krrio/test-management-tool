@@ -17,6 +17,14 @@ const StepRunSchema = new Schema(
       createdAt: { type: Date },
       createdBy: { type: String },
     },
+    externalTask: {
+      provider: { type: String, enum: ["jira", "clickup"] },
+      key: { type: String },
+      id: { type: String },
+      url: { type: String },
+      createdAt: { type: Date },
+      createdBy: { type: String },
+    },
   },
   { _id: false }
 );
@@ -47,6 +55,14 @@ export type RunDocument = {
       updatedBy?: string;
       updatedAt?: Date;
       jiraIssue?: {
+        key: string;
+        id?: string;
+        url?: string;
+        createdAt?: Date;
+        createdBy?: string;
+      };
+      externalTask?: {
+        provider: "jira" | "clickup";
         key: string;
         id?: string;
         url?: string;

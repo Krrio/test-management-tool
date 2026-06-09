@@ -1,112 +1,165 @@
-"use client"
+"use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { useTheme } from "next-themes"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Button } from "@/components/ui/button"
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
-import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
-import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle, AlertDialogCancel } from "@/components/ui/alert-dialog"
-import { NotificationsBell } from "@/components/notifications-bell"
-import { ChevronDown, ChevronUp, ArrowLeft, Copy, Trash, ExternalLink, Loader2, Moon, Sun } from "lucide-react"
-import Link from "next/link"
-import { SignedIn, UserButton } from "@clerk/nextjs"
-import { toast } from "@/components/ui/sonner"
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTheme } from "next-themes";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
+import { NotificationsBell } from "@/components/notifications-bell";
+import {
+  ChevronDown,
+  ChevronUp,
+  ArrowLeft,
+  Copy,
+  Trash,
+  ExternalLink,
+  Loader2,
+  Moon,
+  Sun,
+} from "lucide-react";
+import Link from "next/link";
+import { SignedIn, UserButton } from "@clerk/nextjs";
+import { toast } from "@/components/ui/sonner";
 
-
-type StepStatus = "untested" | "passed" | "failed" | "blocked"
+type StepStatus = "untested" | "passed" | "failed" | "blocked";
 
 type TestStep = {
-  id: string
-  title: string
-  description: string
-  expectedResults: string
-}
+  id: string;
+  title: string;
+  description: string;
+  expectedResults: string;
+};
 
 type StepIssue = {
-  key: string
-  url?: string
-  id?: string
-  createdAt?: string
-  createdBy?: string
-}
+  provider?: "jira" | "clickup";
+  key: string;
+  url?: string;
+  id?: string;
+  createdAt?: string;
+  createdBy?: string;
+};
 
 type StepRun = {
-  status: StepStatus
-  comment?: string
-  jiraIssue?: StepIssue
-}
+  status: StepStatus;
+  comment?: string;
+  externalTask?: StepIssue;
+  jiraIssue?: StepIssue;
+};
 
 type RawStepRun = {
-  status?: StepStatus
-  comment?: unknown
-  jiraIssue?: (Partial<StepIssue> & { createdAt?: unknown }) | null
-}
+  status?: StepStatus;
+  comment?: unknown;
+  externalTask?: (Partial<StepIssue> & { createdAt?: unknown }) | null;
+  jiraIssue?: (Partial<StepIssue> & { createdAt?: unknown }) | null;
+};
 
-type CreateJiraResponse = {
+type CreateExternalTaskResponse = {
   stepRun?: {
-    status?: StepStatus
-    comment?: string
-    jiraIssue?: StepIssue
-  }
-  issue?: StepIssue
-  error?: string
-}
+    status?: StepStatus;
+    comment?: string;
+    externalTask?: StepIssue;
+    jiraIssue?: StepIssue;
+  };
+  issue?: StepIssue;
+  task?: StepIssue;
+  error?: string;
+};
 
 type Section = {
-  id: string
-  name: string
-  steps: TestStep[]
-}
+  id: string;
+  name: string;
+  steps: TestStep[];
+};
 
 type Module = {
-  id: string
-  name: string
-  sections: Section[]
-}
+  id: string;
+  name: string;
+  sections: Section[];
+};
 
 type Project = {
-  id: string
-  name: string
-  modules: Module[]
-}
+  id: string;
+  name: string;
+  modules: Module[];
+};
 
 type Organization = {
-  id: string
-  name: string
-  role: "owner" | "admin" | "member"
-}
+  id: string;
+  name: string;
+  role: "owner" | "admin" | "member";
+};
 
 type OrganizationJiraConfig = {
-  enabled: boolean
-  baseUrl: string
-  email: string
-  projectKey: string
-  issueType: string
-  hasToken: boolean
-  updatedAt: string | null
-}
+  enabled: boolean;
+  baseUrl: string;
+  email: string;
+  projectKey: string;
+  issueType: string;
+  hasToken: boolean;
+  updatedAt: string | null;
+};
+
+type OrganizationClickUpConfig = {
+  enabled: boolean;
+  listId: string;
+  status: string;
+  hasToken: boolean;
+  updatedAt: string | null;
+};
+
+type IssueProvider = "none" | "jira" | "clickup";
+
+type OrganizationIntegrationsConfig = {
+  provider: IssueProvider;
+  jira: OrganizationJiraConfig;
+  clickup: OrganizationClickUpConfig;
+};
 
 type ApiProject = {
-  _id: string
-  name: string
+  _id: string;
+  name: string;
   modules?: Array<{
-    _id: string
-    name: string
+    _id: string;
+    name: string;
     sections?: Array<{
-      _id: string
-      name: string
-      steps?: Array<{ _id: string; title: string; description: string; expectedResults?: string }>
-    }>
-  }>
-}
+      _id: string;
+      name: string;
+      steps?: Array<{
+        _id: string;
+        title: string;
+        description: string;
+        expectedResults?: string;
+      }>;
+    }>;
+  }>;
+};
 
 type PusherChannel = {
-  bind: (event: string, callback: (...args: unknown[]) => void) => void
-  unsubscribe: () => void
-  members?: { count?: number }
-}
+  bind: (event: string, callback: (...args: unknown[]) => void) => void;
+  unsubscribe: () => void;
+  members?: { count?: number };
+};
 
 const mapApiProjects = (items: ApiProject[]): Project[] =>
   items.map((p) => ({
@@ -122,252 +175,397 @@ const mapApiProjects = (items: ApiProject[]): Project[] =>
           id: st._id,
           title: st.title,
           description: st.description,
-          expectedResults: typeof st.expectedResults === 'string' ? st.expectedResults : '',
+          expectedResults:
+            typeof st.expectedResults === "string" ? st.expectedResults : "",
         })),
       })),
     })),
-  }))
+  }));
 
 const normalizeJiraConfig = (value: unknown): OrganizationJiraConfig | null => {
-  if (!value || typeof value !== 'object') return null
-  const raw = value as Record<string, unknown>
-  const issueTypeRaw = typeof raw.issueType === 'string' && raw.issueType.trim() ? raw.issueType : 'Task'
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const issueTypeRaw =
+    typeof raw.issueType === "string" && raw.issueType.trim() ?
+      raw.issueType
+    : "Task";
   return {
     enabled: Boolean(raw.enabled),
-    baseUrl: typeof raw.baseUrl === 'string' ? raw.baseUrl : '',
-    email: typeof raw.email === 'string' ? raw.email : '',
-    projectKey: typeof raw.projectKey === 'string' ? raw.projectKey : '',
+    baseUrl: typeof raw.baseUrl === "string" ? raw.baseUrl : "",
+    email: typeof raw.email === "string" ? raw.email : "",
+    projectKey: typeof raw.projectKey === "string" ? raw.projectKey : "",
     issueType: issueTypeRaw,
     hasToken: Boolean(raw.hasToken),
-    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : null,
-  }
-}
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : null,
+  };
+};
+
+const normalizeClickUpConfig = (
+  value: unknown,
+): OrganizationClickUpConfig | null => {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  return {
+    enabled: Boolean(raw.enabled),
+    listId: typeof raw.listId === "string" ? raw.listId : "",
+    status: typeof raw.status === "string" ? raw.status : "",
+    hasToken: Boolean(raw.hasToken),
+    updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : null,
+  };
+};
+
+const emptyJiraConfig: OrganizationJiraConfig = {
+  enabled: false,
+  baseUrl: "",
+  email: "",
+  projectKey: "",
+  issueType: "Task",
+  hasToken: false,
+  updatedAt: null,
+};
+
+const emptyClickUpConfig: OrganizationClickUpConfig = {
+  enabled: false,
+  listId: "",
+  status: "",
+  hasToken: false,
+  updatedAt: null,
+};
+
+const normalizeIntegrationsConfig = (
+  value: unknown,
+): OrganizationIntegrationsConfig | null => {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const provider =
+    (
+      raw.provider === "jira" ||
+      raw.provider === "clickup" ||
+      raw.provider === "none"
+    ) ?
+      raw.provider
+    : "none";
+  return {
+    provider,
+    jira: normalizeJiraConfig(raw.jira) ?? emptyJiraConfig,
+    clickup: normalizeClickUpConfig(raw.clickup) ?? emptyClickUpConfig,
+  };
+};
 
 const isStepStatus = (value: unknown): value is StepStatus =>
-  value === 'untested' || value === 'passed' || value === 'failed' || value === 'blocked'
+  value === "untested" ||
+  value === "passed" ||
+  value === "failed" ||
+  value === "blocked";
 
-const normalizeStepIssue = (value: unknown): StepIssue | undefined => {
-  if (!value || typeof value !== 'object') return undefined
-  const raw = value as Record<string, unknown>
-  const key = typeof raw.key === 'string' ? raw.key.trim() : ''
-  if (!key) return undefined
+const normalizeStepIssue = (
+  value: unknown,
+  fallbackProvider?: "jira" | "clickup",
+): StepIssue | undefined => {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as Record<string, unknown>;
+  const key = typeof raw.key === "string" ? raw.key.trim() : "";
+  if (!key) return undefined;
 
-  const issue: StepIssue = { key }
-  if (typeof raw.url === 'string') issue.url = raw.url
-  if (typeof raw.id === 'string') issue.id = raw.id
-  if (typeof raw.createdBy === 'string') issue.createdBy = raw.createdBy
+  const issue: StepIssue = { key };
+  if (raw.provider === "jira" || raw.provider === "clickup") {
+    issue.provider = raw.provider;
+  } else if (fallbackProvider) {
+    issue.provider = fallbackProvider;
+  }
+  if (typeof raw.url === "string") issue.url = raw.url;
+  if (typeof raw.id === "string") issue.id = raw.id;
+  if (typeof raw.createdBy === "string") issue.createdBy = raw.createdBy;
 
-  const createdAtValue = raw.createdAt
-  if (typeof createdAtValue === 'string') {
-    issue.createdAt = createdAtValue
+  const createdAtValue = raw.createdAt;
+  if (typeof createdAtValue === "string") {
+    issue.createdAt = createdAtValue;
   } else if (
     createdAtValue &&
-    typeof createdAtValue === 'object' &&
-    'toISOString' in createdAtValue &&
-    typeof (createdAtValue as { toISOString?: unknown }).toISOString === 'function'
+    typeof createdAtValue === "object" &&
+    "toISOString" in createdAtValue &&
+    typeof (createdAtValue as { toISOString?: unknown }).toISOString ===
+      "function"
   ) {
-    issue.createdAt = (createdAtValue as Date).toISOString()
+    issue.createdAt = (createdAtValue as Date).toISOString();
   }
 
-  return issue
-}
+  return issue;
+};
 
 type StepUpdatedPayload = {
-  stepId: string
-  status: StepStatus
-  comment?: string
-  jiraIssue?: StepIssue
-}
+  stepId: string;
+  status: StepStatus;
+  comment?: string;
+  externalTask?: StepIssue;
+  jiraIssue?: StepIssue;
+};
 
 type StepBroadcastPayload = StepUpdatedPayload & {
-  organizationId: string
-  projectId: string
-  moduleId: string
-  sectionId: string
-}
+  organizationId: string;
+  projectId: string;
+  moduleId: string;
+  sectionId: string;
+};
 
 type StructureUpdatedPayload = {
-  organizationId: string
-  projectId: string
-}
+  organizationId: string;
+  projectId: string;
+};
 
 const parseStepUpdatedPayload = (input: unknown): StepUpdatedPayload | null => {
-  if (!input || typeof input !== 'object') return null
-  const raw = input as Record<string, unknown>
-  const stepId = typeof raw.stepId === 'string' ? raw.stepId : ''
-  const status = isStepStatus(raw.status) ? raw.status : undefined
-  if (!stepId || !status) return null
+  if (!input || typeof input !== "object") return null;
+  const raw = input as Record<string, unknown>;
+  const stepId = typeof raw.stepId === "string" ? raw.stepId : "";
+  const status = isStepStatus(raw.status) ? raw.status : undefined;
+  if (!stepId || !status) return null;
 
   const payload: StepUpdatedPayload = {
     stepId,
     status,
-    comment: typeof raw.comment === 'string' ? raw.comment : undefined,
-    jiraIssue: normalizeStepIssue(raw.jiraIssue),
-  }
+    comment: typeof raw.comment === "string" ? raw.comment : undefined,
+    externalTask: normalizeStepIssue(raw.externalTask),
+    jiraIssue: normalizeStepIssue(raw.jiraIssue, "jira"),
+  };
 
-  return payload
-}
+  return payload;
+};
 
-const parseStepBroadcastPayload = (input: unknown): StepBroadcastPayload | null => {
-  if (!input || typeof input !== 'object') return null
-  const base = parseStepUpdatedPayload(input)
-  if (!base) return null
-  const raw = input as Record<string, unknown>
-  const organizationId = typeof raw.organizationId === 'string' ? raw.organizationId : ''
-  const projectId = typeof raw.projectId === 'string' ? raw.projectId : ''
-  const moduleId = typeof raw.moduleId === 'string' ? raw.moduleId : ''
-  const sectionId = typeof raw.sectionId === 'string' ? raw.sectionId : ''
-  if (!organizationId || !projectId || !moduleId || !sectionId) return null
-  return { ...base, organizationId, projectId, moduleId, sectionId }
-}
+const parseStepBroadcastPayload = (
+  input: unknown,
+): StepBroadcastPayload | null => {
+  if (!input || typeof input !== "object") return null;
+  const base = parseStepUpdatedPayload(input);
+  if (!base) return null;
+  const raw = input as Record<string, unknown>;
+  const organizationId =
+    typeof raw.organizationId === "string" ? raw.organizationId : "";
+  const projectId = typeof raw.projectId === "string" ? raw.projectId : "";
+  const moduleId = typeof raw.moduleId === "string" ? raw.moduleId : "";
+  const sectionId = typeof raw.sectionId === "string" ? raw.sectionId : "";
+  if (!organizationId || !projectId || !moduleId || !sectionId) return null;
+  return { ...base, organizationId, projectId, moduleId, sectionId };
+};
 
-const parseStructureUpdatedPayload = (input: unknown): StructureUpdatedPayload | null => {
-  if (!input || typeof input !== 'object') return null
-  const raw = input as Record<string, unknown>
-  const organizationId = typeof raw.organizationId === 'string' ? raw.organizationId : ''
-  const projectId = typeof raw.projectId === 'string' ? raw.projectId : ''
-  if (!organizationId || !projectId) return null
-  return { organizationId, projectId }
-}
+const parseStructureUpdatedPayload = (
+  input: unknown,
+): StructureUpdatedPayload | null => {
+  if (!input || typeof input !== "object") return null;
+  const raw = input as Record<string, unknown>;
+  const organizationId =
+    typeof raw.organizationId === "string" ? raw.organizationId : "";
+  const projectId = typeof raw.projectId === "string" ? raw.projectId : "";
+  if (!organizationId || !projectId) return null;
+  return { organizationId, projectId };
+};
 
 // Data now fetched from API
 
-type SectionRunKey = `${string}|${string}|${string}|${string}` // organizationId|projectId|moduleId|sectionId
+type SectionRunKey = `${string}|${string}|${string}|${string}`; // organizationId|projectId|moduleId|sectionId
 
 export default function TestCaseLabPage() {
-  const [organizations, setOrganizations] = useState<Organization[]>([])
-  const [organizationId, setOrganizationId] = useState<string>("")
-  const [loadingOrganizations, setLoadingOrganizations] = useState(true)
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [organizationId, setOrganizationId] = useState<string>("");
+  const [loadingOrganizations, setLoadingOrganizations] = useState(true);
   const activeOrganization = useMemo(
     () => organizations.find((org) => org.id === organizationId),
     [organizations, organizationId],
-  )
+  );
   const canManageOrganization = useMemo(
-    () => activeOrganization?.role === 'owner' || activeOrganization?.role === 'admin',
+    () =>
+      activeOrganization?.role === "owner" ||
+      activeOrganization?.role === "admin",
     [activeOrganization],
-  )
+  );
 
-  const [organizationFormOpen, setOrganizationFormOpen] = useState(false)
-  const [organizationFormId, setOrganizationFormId] = useState("")
-  const [organizationFormName, setOrganizationFormName] = useState("")
-  const [organizationFormError, setOrganizationFormError] = useState("")
-  const [organizationFormSubmitting, setOrganizationFormSubmitting] = useState(false)
+  const [organizationFormOpen, setOrganizationFormOpen] = useState(false);
+  const [organizationFormId, setOrganizationFormId] = useState("");
+  const [organizationFormName, setOrganizationFormName] = useState("");
+  const [organizationFormError, setOrganizationFormError] = useState("");
+  const [organizationFormSubmitting, setOrganizationFormSubmitting] =
+    useState(false);
 
-  const [projects, setProjects] = useState<Project[]>([])
-  const [projectId, setProjectId] = useState<string>("")
-  const [moduleId, setModuleId] = useState<string>("")
-  const [sectionId, setSectionId] = useState<string>("")
-  const [loadingProjects, setLoadingProjects] = useState(true)
-  const [loadingRun, setLoadingRun] = useState(false)
-  const { theme, setTheme } = useTheme()
-  const [themeMounted, setThemeMounted] = useState(false)
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState<string>("");
+  const [moduleId, setModuleId] = useState<string>("");
+  const [sectionId, setSectionId] = useState<string>("");
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [loadingRun, setLoadingRun] = useState(false);
+  const { theme, setTheme } = useTheme();
+  const [themeMounted, setThemeMounted] = useState(false);
 
   // runs: map from sectionKey -> map of stepId -> { status, comment? }
-  const [runs, setRuns] = useState<Record<SectionRunKey, Record<string, StepRun>>>({})
-  const [sectionCompleteOpen, setSectionCompleteOpen] = useState(false)
-  const [sectionCompleteName, setSectionCompleteName] = useState<string | undefined>(undefined)
-  const [stepSort, setStepSort] = useState<"asc" | "desc">("asc")
-  const [viewerCount, setViewerCount] = useState<number>(0)
-  const [editingStepId, setEditingStepId] = useState<string | null>(null)
-  const [editTitle, setEditTitle] = useState<string>("")
-  const [editDesc, setEditDesc] = useState<string>("")
-  const [editExpectedResults, setEditExpectedResults] = useState<string>("")
-  const [editingCommentStepId, setEditingCommentStepId] = useState<string | null>(null)
-  const [commentDraft, setCommentDraft] = useState<string>("")
-  const [discardOpen, setDiscardOpen] = useState(false)
-  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [runs, setRuns] = useState<
+    Record<SectionRunKey, Record<string, StepRun>>
+  >({});
+  const [sectionCompleteOpen, setSectionCompleteOpen] = useState(false);
+  const [sectionCompleteName, setSectionCompleteName] = useState<
+    string | undefined
+  >(undefined);
+  const [stepSort, setStepSort] = useState<"asc" | "desc">("asc");
+  const [viewerCount, setViewerCount] = useState<number>(0);
+  const [editingStepId, setEditingStepId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState<string>("");
+  const [editDesc, setEditDesc] = useState<string>("");
+  const [editExpectedResults, setEditExpectedResults] = useState<string>("");
+  const [editingCommentStepId, setEditingCommentStepId] = useState<
+    string | null
+  >(null);
+  const [commentDraft, setCommentDraft] = useState<string>("");
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<
-    | { type: 'project'; id: string; name: string }
-    | { type: 'module'; id: string; name: string }
-    | { type: 'section'; id: string; name: string }
-    | { type: 'step'; id: string; name: string }
+    | { type: "project"; id: string; name: string }
+    | { type: "module"; id: string; name: string }
+    | { type: "section"; id: string; name: string }
+    | { type: "step"; id: string; name: string }
     | null
-  >(null)
-  const [dupOpen, setDupOpen] = useState(false)
-  const [dupBase, setDupBase] = useState<Module | null>(null)
-  const [dupName, setDupName] = useState("")
-  const [search, setSearch] = useState("")
-  const [creatingIssueFor, setCreatingIssueFor] = useState<string | null>(null)
-  const [jiraErrors, setJiraErrors] = useState<Record<string, string>>({})
-  const [inviteLoading, setInviteLoading] = useState(false)
-  const [exporting, setExporting] = useState(false)
-  const [jiraConfig, setJiraConfig] = useState<OrganizationJiraConfig | null>(null)
-  const [jiraConfigLoading, setJiraConfigLoading] = useState(false)
-  const [jiraDialogOpen, setJiraDialogOpen] = useState(false)
-  const [jiraDialogError, setJiraDialogError] = useState("")
-  const [jiraSaving, setJiraSaving] = useState(false)
-  const [jiraForm, setJiraForm] = useState({
-    enabled: false,
-    baseUrl: "",
-    email: "",
-    projectKey: "",
-    issueType: "Task",
-    apiToken: "",
-  })
-  const isDarkMode = theme === "dark"
+  >(null);
+  const [dupOpen, setDupOpen] = useState(false);
+  const [dupBase, setDupBase] = useState<Module | null>(null);
+  const [dupName, setDupName] = useState("");
+  const [search, setSearch] = useState("");
+  const [creatingIssueFor, setCreatingIssueFor] = useState<string | null>(null);
+  const [integrationErrors, setIntegrationErrors] = useState<
+    Record<string, string>
+  >({});
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [integrationsConfig, setIntegrationsConfig] =
+    useState<OrganizationIntegrationsConfig | null>(null);
+  const [integrationsLoading, setIntegrationsLoading] = useState(false);
+  const [integrationsDialogOpen, setIntegrationsDialogOpen] = useState(false);
+  const [integrationsDialogError, setIntegrationsDialogError] = useState("");
+  const [integrationsSaving, setIntegrationsSaving] = useState(false);
+  const [integrationsForm, setIntegrationsForm] = useState<{
+    provider: IssueProvider;
+    jira: {
+      baseUrl: string;
+      email: string;
+      projectKey: string;
+      issueType: string;
+      apiToken: string;
+    };
+    clickup: {
+      listId: string;
+      status: string;
+      apiToken: string;
+    };
+  }>({
+    provider: "none",
+    jira: {
+      baseUrl: "",
+      email: "",
+      projectKey: "",
+      issueType: "Task",
+      apiToken: "",
+    },
+    clickup: {
+      listId: "",
+      status: "",
+      apiToken: "",
+    },
+  });
+  const isDarkMode = theme === "dark";
 
   useEffect(() => {
-    setThemeMounted(true)
-  }, [])
+    setThemeMounted(true);
+  }, []);
 
   const loadOrganizations = useCallback(async () => {
-    setLoadingOrganizations(true)
+    setLoadingOrganizations(true);
     try {
-      const res = await fetch('/api/organizations')
-      const data = await res.json()
-      const list = (data?.organizations ?? []) as Organization[]
-      setOrganizations(list)
+      const res = await fetch("/api/organizations");
+      const data = await res.json();
+      const list = (data?.organizations ?? []) as Organization[];
+      setOrganizations(list);
       setOrganizationId((prev) => {
-        if (prev && list.some((org) => org.id === prev)) return prev
-        return list[0]?.id ?? ""
-      })
+        if (prev && list.some((org) => org.id === prev)) return prev;
+        return list[0]?.id ?? "";
+      });
     } catch {
-      setOrganizations([])
-      setOrganizationId("")
+      setOrganizations([]);
+      setOrganizationId("");
     } finally {
-      setLoadingOrganizations(false)
+      setLoadingOrganizations(false);
     }
-  }, [])
+  }, []);
 
-  const project = useMemo(() => projects.find((p) => p.id === projectId), [projects, projectId])
-  const activeModule = useMemo(() => project?.modules.find((m) => m.id === moduleId), [project, moduleId])
-  const activeSection = useMemo(() => activeModule?.sections.find((s) => s.id === sectionId), [activeModule, sectionId])
+  const project = useMemo(
+    () => projects.find((p) => p.id === projectId),
+    [projects, projectId],
+  );
+  const activeModule = useMemo(
+    () => project?.modules.find((m) => m.id === moduleId),
+    [project, moduleId],
+  );
+  const activeSection = useMemo(
+    () => activeModule?.sections.find((s) => s.id === sectionId),
+    [activeModule, sectionId],
+  );
 
-  const getSectionKey = (oId: string, pId: string, mId: string, sId: string): SectionRunKey =>
-    `${oId}|${pId}|${mId}|${sId}`
+  const getSectionKey = (
+    oId: string,
+    pId: string,
+    mId: string,
+    sId: string,
+  ): SectionRunKey => `${oId}|${pId}|${mId}|${sId}`;
 
   const sectionKey = useMemo<SectionRunKey | undefined>(() => {
-    if (!organizationId || !project || !activeModule || !activeSection) return undefined
-    return getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
-  }, [organizationId, project, activeModule, activeSection])
+    if (!organizationId || !project || !activeModule || !activeSection)
+      return undefined;
+    return getSectionKey(
+      organizationId,
+      project.id,
+      activeModule.id,
+      activeSection.id,
+    );
+  }, [organizationId, project, activeModule, activeSection]);
 
-  const getStepStatus = useCallback((sKey: SectionRunKey | undefined, stepId: string): StepStatus => {
-    if (!sKey) return "untested"
-    const value = runs[sKey]?.[stepId]
-    return value?.status ?? "untested"
-  }, [runs])
-
-  const getStepComment = useCallback((sKey: SectionRunKey | undefined, stepId: string): string => {
-    if (!sKey) return ""
-    return runs[sKey]?.[stepId]?.comment ?? ""
-  }, [runs])
-
-  const getStepIssue = useCallback(
-    (sKey: SectionRunKey | undefined, stepId: string): StepIssue | undefined => {
-      if (!sKey) return undefined
-      return runs[sKey]?.[stepId]?.jiraIssue
+  const getStepStatus = useCallback(
+    (sKey: SectionRunKey | undefined, stepId: string): StepStatus => {
+      if (!sKey) return "untested";
+      const value = runs[sKey]?.[stepId];
+      return value?.status ?? "untested";
     },
     [runs],
-  )
+  );
 
-  const setStepStatus = async (sKey: SectionRunKey | undefined, stepId: string, status: StepStatus, comment?: string) => {
-    if (!sKey || !project || !activeModule || !activeSection || !organizationId) return
-    setJiraErrors((prev) => {
-      if (!prev[stepId]) return prev
-      const next = { ...prev }
-      delete next[stepId]
-      return next
-    })
+  const getStepComment = useCallback(
+    (sKey: SectionRunKey | undefined, stepId: string): string => {
+      if (!sKey) return "";
+      return runs[sKey]?.[stepId]?.comment ?? "";
+    },
+    [runs],
+  );
+
+  const getStepIssue = useCallback(
+    (
+      sKey: SectionRunKey | undefined,
+      stepId: string,
+    ): StepIssue | undefined => {
+      if (!sKey) return undefined;
+      return (
+        runs[sKey]?.[stepId]?.externalTask ?? runs[sKey]?.[stepId]?.jiraIssue
+      );
+    },
+    [runs],
+  );
+
+  const setStepStatus = async (
+    sKey: SectionRunKey | undefined,
+    stepId: string,
+    status: StepStatus,
+    comment?: string,
+  ) => {
+    if (!sKey || !project || !activeModule || !activeSection || !organizationId)
+      return;
+    setIntegrationErrors((prev) => {
+      if (!prev[stepId]) return prev;
+      const next = { ...prev };
+      delete next[stepId];
+      return next;
+    });
     // optimistic update
     setRuns((prev) => ({
       ...prev,
@@ -376,15 +574,18 @@ export default function TestCaseLabPage() {
         [stepId]: {
           ...(prev[sKey]?.[stepId] ?? { status: "untested" }),
           status,
-          comment: typeof comment === "string" ? comment : prev[sKey]?.[stepId]?.comment,
+          comment:
+            typeof comment === "string" ? comment : (
+              prev[sKey]?.[stepId]?.comment
+            ),
         },
       },
-    }))
+    }));
     // persist
     try {
       await fetch(`/api/runs`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           organizationId,
           projectId: project.id,
@@ -394,32 +595,44 @@ export default function TestCaseLabPage() {
           status,
           comment,
         }),
-      })
+      });
     } catch {
       // ignore errors in optimistic skeleton, could rollback here
     }
-  }
+  };
 
-  const createJiraTask = async (step: TestStep) => {
-    if (!organizationId || !project || !activeModule || !activeSection || !sectionKey) return
-    if (!jiraEnabled) {
-      setJiraErrors((prev) => ({
+  const createExternalTask = async (step: TestStep) => {
+    if (
+      !organizationId ||
+      !project ||
+      !activeModule ||
+      !activeSection ||
+      !sectionKey
+    )
+      return;
+    if (!integrationEnabled) {
+      setIntegrationErrors((prev) => ({
         ...prev,
-        [step.id]: 'Jira integration is disabled for this organization.',
-      }))
-      return
+        [step.id]: "Issue integration is disabled for this organization.",
+      }));
+      return;
     }
-    const key = getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
-    setCreatingIssueFor(step.id)
-    setJiraErrors((prev) => {
-      const next = { ...prev }
-      delete next[step.id]
-      return next
-    })
+    const key = getSectionKey(
+      organizationId,
+      project.id,
+      activeModule.id,
+      activeSection.id,
+    );
+    setCreatingIssueFor(step.id);
+    setIntegrationErrors((prev) => {
+      const next = { ...prev };
+      delete next[step.id];
+      return next;
+    });
     try {
-      const res = await fetch('/api/jira/issues', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/integrations/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           organizationId,
           projectId: project.id,
@@ -428,24 +641,30 @@ export default function TestCaseLabPage() {
           stepId: step.id,
           comment: getStepComment(sectionKey, step.id) || undefined,
         }),
-      })
-      let payload: unknown = null
+      });
+      let payload: unknown = null;
       try {
-        payload = await res.json()
+        payload = await res.json();
       } catch {}
-      const data = (payload ?? null) as CreateJiraResponse | null
+      const data = (payload ?? null) as CreateExternalTaskResponse | null;
       if (!res.ok) {
-        const message = data?.error
-          ? String(data.error)
-          : 'Failed to create Jira issue'
-        setJiraErrors((prev) => ({ ...prev, [step.id]: message }))
-        return
+        const message =
+          data?.error ? String(data.error) : "Failed to create external task";
+        setIntegrationErrors((prev) => ({ ...prev, [step.id]: message }));
+        return;
       }
       setRuns((prev) => {
-        const prevSection = prev[key] ?? {}
-        const prevStep = prevSection[step.id]
-        const nextStatus = data?.stepRun?.status ?? prevStep?.status ?? 'failed'
-        const normalizedIssue = normalizeStepIssue(data?.stepRun?.jiraIssue)
+        const prevSection = prev[key] ?? {};
+        const prevStep = prevSection[step.id];
+        const nextStatus =
+          data?.stepRun?.status ?? prevStep?.status ?? "failed";
+        const normalizedTask = normalizeStepIssue(
+          data?.stepRun?.externalTask ?? data?.task ?? data?.issue,
+        );
+        const normalizedJiraIssue = normalizeStepIssue(
+          data?.stepRun?.jiraIssue,
+          "jira",
+        );
         return {
           ...prev,
           [key]: {
@@ -454,89 +673,108 @@ export default function TestCaseLabPage() {
               ...(prevStep ?? { status: nextStatus }),
               status: nextStatus,
               comment:
-                typeof data?.stepRun?.comment === 'string'
-                  ? data.stepRun.comment
-                  : prevStep?.comment,
-              jiraIssue: normalizedIssue ?? prevStep?.jiraIssue,
+                typeof data?.stepRun?.comment === "string" ?
+                  data.stepRun.comment
+                : prevStep?.comment,
+              externalTask: normalizedTask ?? prevStep?.externalTask,
+              jiraIssue: normalizedJiraIssue ?? prevStep?.jiraIssue,
             },
           },
-        }
-      })
+        };
+      });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create Jira issue'
-      setJiraErrors((prev) => ({ ...prev, [step.id]: message }))
+      const message =
+        error instanceof Error ?
+          error.message
+        : "Failed to create external task";
+      setIntegrationErrors((prev) => ({ ...prev, [step.id]: message }));
     } finally {
-      setCreatingIssueFor(null)
+      setCreatingIssueFor(null);
     }
-  }
+  };
 
   const computeSectionStatus = (sec: Section): StepStatus => {
-    if (!project || !activeModule || !organizationId) return "untested"
-    const key = getSectionKey(organizationId, project.id, activeModule.id, sec.id)
-    const statuses = sec.steps.map((st) => runs[key]?.[st.id]?.status ?? "untested")
-    if (statuses.length && statuses.every((s) => s === "passed")) return "passed"
-    if (statuses.some((s) => s === "failed")) return "failed"
-    if (statuses.some((s) => s === "blocked")) return "blocked"
-    if (statuses.some((s) => s === "passed")) return "untested" // show as untested if partially done
-    return "untested"
-  }
+    if (!project || !activeModule || !organizationId) return "untested";
+    const key = getSectionKey(
+      organizationId,
+      project.id,
+      activeModule.id,
+      sec.id,
+    );
+    const statuses = sec.steps.map(
+      (st) => runs[key]?.[st.id]?.status ?? "untested",
+    );
+    if (statuses.length && statuses.every((s) => s === "passed"))
+      return "passed";
+    if (statuses.some((s) => s === "failed")) return "failed";
+    if (statuses.some((s) => s === "blocked")) return "blocked";
+    if (statuses.some((s) => s === "passed")) return "untested"; // show as untested if partially done
+    return "untested";
+  };
 
   const statusBadge = (status: StepStatus | "in_progress") => {
-    const map: Record<string, { text: string; variant: "default" | "secondary" | "destructive" | "outline"; className?: string }> = {
+    const map: Record<
+      string,
+      {
+        text: string;
+        variant: "default" | "secondary" | "destructive" | "outline";
+        className?: string;
+      }
+    > = {
       passed: { text: "PASSED", variant: "default" },
       failed: { text: "FAILED", variant: "destructive" },
       blocked: { text: "BLOCKED", variant: "secondary" },
       in_progress: { text: "IN PROGRESS", variant: "outline" },
       untested: { text: "UNTESTED", variant: "outline" },
-    }
-    const s = map[status]
-    return <Badge variant={s.variant}>{s.text}</Badge>
-  }
+    };
+    const s = map[status];
+    return <Badge variant={s.variant}>{s.text}</Badge>;
+  };
 
   const handleSelectProject = (id: string) => {
-    const p = projects.find((x) => x.id === id)
-    setProjectId(id)
-    const firstModule = p?.modules[0]
-    setModuleId(firstModule?.id ?? "")
-    const firstSection = firstModule?.sections[0]
-    setSectionId(firstSection?.id ?? "")
-  }
+    const p = projects.find((x) => x.id === id);
+    setProjectId(id);
+    const firstModule = p?.modules[0];
+    setModuleId(firstModule?.id ?? "");
+    const firstSection = firstModule?.sections[0];
+    setSectionId(firstSection?.id ?? "");
+  };
 
   const handleSelectModule = (id: string) => {
-    setModuleId(id)
-    const m = project?.modules.find((x) => x.id === id)
-    const firstSection = m?.sections[0]
-    setSectionId(firstSection?.id ?? "")
-  }
+    setModuleId(id);
+    const m = project?.modules.find((x) => x.id === id);
+    const firstSection = m?.sections[0];
+    setSectionId(firstSection?.id ?? "");
+  };
 
   // Module progress breakdown by status so the top bar can reflect multiple states
   const moduleProgress = useMemo(() => {
-    const mod = activeModule
+    const mod = activeModule;
     if (!project || !mod || !organizationId) {
       return {
         total: 0,
         counts: { passed: 0, failed: 0, blocked: 0, untested: 0 },
         percentages: { passed: 0, failed: 0, blocked: 0, untested: 0 },
-      }
+      };
     }
 
-    let total = 0
+    let total = 0;
     const counts: Record<StepStatus | "untested", number> = {
       passed: 0,
       failed: 0,
       blocked: 0,
       untested: 0,
-    }
+    };
 
     for (const sec of mod.sections) {
-      const key = getSectionKey(organizationId, project.id, mod.id, sec.id)
+      const key = getSectionKey(organizationId, project.id, mod.id, sec.id);
       for (const st of sec.steps) {
-        total += 1
-        const status = getStepStatus(key, st.id)
+        total += 1;
+        const status = getStepStatus(key, st.id);
         if (status in counts) {
-          counts[status] += 1
+          counts[status] += 1;
         } else {
-          counts.untested += 1
+          counts.untested += 1;
         }
       }
     }
@@ -546,10 +784,10 @@ export default function TestCaseLabPage() {
         status,
         total === 0 ? 0 : Number(((counts[status] / total) * 100).toFixed(2)),
       ]),
-    ) as { passed: number; failed: number; blocked: number; untested: number }
+    ) as { passed: number; failed: number; blocked: number; untested: number };
 
-    return { total, counts, percentages }
-  }, [project, activeModule, organizationId, getStepStatus])
+    return { total, counts, percentages };
+  }, [project, activeModule, organizationId, getStepStatus]);
 
   const progressSegments = useMemo(() => {
     const config = [
@@ -557,99 +795,106 @@ export default function TestCaseLabPage() {
       { key: "failed", label: "Failed", className: "bg-destructive" },
       { key: "blocked", label: "Blocked", className: "bg-amber-500" },
       { key: "untested", label: "Untested", className: "bg-muted" },
-    ] as const
+    ] as const;
 
     return config.map((entry) => ({
       ...entry,
       count: moduleProgress.counts[entry.key],
       pct: moduleProgress.percentages[entry.key],
-    }))
-  }, [moduleProgress])
+    }));
+  }, [moduleProgress]);
 
   const activeProgressSegments = useMemo(
     () => progressSegments.filter((segment) => segment.pct > 0),
     [progressSegments],
-  )
+  );
 
   const sortedSteps = (sec: Section) => {
-    const arr = [...sec.steps]
-    if (stepSort === "desc") arr.reverse()
-    return arr
-  }
+    const arr = [...sec.steps];
+    if (stepSort === "desc") arr.reverse();
+    return arr;
+  };
 
-  const q = useMemo(() => search.trim().toLowerCase(), [search])
+  const q = useMemo(() => search.trim().toLowerCase(), [search]);
 
   const filteredModules = useMemo(() => {
-    if (!project) return [] as Module[]
-    if (!q) return project.modules
+    if (!project) return [] as Module[];
+    if (!q) return project.modules;
     return project.modules.filter((m) => {
-      if (m.name.toLowerCase().includes(q)) return true
+      if (m.name.toLowerCase().includes(q)) return true;
       for (const s of m.sections) {
-        if (s.name.toLowerCase().includes(q)) return true
+        if (s.name.toLowerCase().includes(q)) return true;
         for (const st of s.steps) {
           if (
             st.title.toLowerCase().includes(q) ||
             st.description.toLowerCase().includes(q) ||
             st.expectedResults.toLowerCase().includes(q)
           )
-            return true
+            return true;
         }
       }
-      return false
-    })
-  }, [project, q])
+      return false;
+    });
+  }, [project, q]);
 
   const filteredSections = useMemo(() => {
-    if (!activeModule) return [] as Section[]
-    if (!q) return activeModule.sections
+    if (!activeModule) return [] as Section[];
+    if (!q) return activeModule.sections;
     return activeModule.sections.filter((s) => {
-      if (s.name.toLowerCase().includes(q)) return true
+      if (s.name.toLowerCase().includes(q)) return true;
       for (const st of s.steps) {
         if (
           st.title.toLowerCase().includes(q) ||
           st.description.toLowerCase().includes(q) ||
           st.expectedResults.toLowerCase().includes(q)
         )
-          return true
+          return true;
       }
-      return false
-    })
-  }, [activeModule, q])
+      return false;
+    });
+  }, [activeModule, q]);
 
   // Refresh projects preserving current selection when possible
   const refreshProjectsPreserve = useCallback(async () => {
     if (!organizationId) {
-      setProjects([])
-      setProjectId("")
-      setModuleId("")
-      setSectionId("")
-      setRuns({})
-      return
+      setProjects([]);
+      setProjectId("");
+      setModuleId("");
+      setSectionId("");
+      setRuns({});
+      return;
     }
     try {
-      const params = new URLSearchParams({ organizationId })
-      const res = await fetch(`/api/projects?${params.toString()}`)
-      const data = await res.json()
-      const raw = Array.isArray(data?.projects) ? (data.projects as ApiProject[]) : []
-      const list = mapApiProjects(raw)
-      setProjects(list)
+      const params = new URLSearchParams({ organizationId });
+      const res = await fetch(`/api/projects?${params.toString()}`);
+      const data = await res.json();
+      const raw =
+        Array.isArray(data?.projects) ? (data.projects as ApiProject[]) : [];
+      const list = mapApiProjects(raw);
+      setProjects(list);
       setRuns((prev) => {
-        const scopedPrefix = `${organizationId}|`
-        const scopedEntries = Object.entries(prev).filter(([key]) => key.startsWith(scopedPrefix))
-        return Object.fromEntries(scopedEntries)
-      })
+        const scopedPrefix = `${organizationId}|`;
+        const scopedEntries = Object.entries(prev).filter(([key]) =>
+          key.startsWith(scopedPrefix),
+        );
+        return Object.fromEntries(scopedEntries);
+      });
       if (!list.length) {
-        setProjectId(""); setModuleId(""); setSectionId("")
-        return
+        setProjectId("");
+        setModuleId("");
+        setSectionId("");
+        return;
       }
-      const pSel = list.find((p) => p.id === projectId) ?? list[0]
-      const mSel = pSel.modules.find((m) => m.id === moduleId) ?? pSel.modules[0]
-      const sSel = mSel?.sections.find((s) => s.id === sectionId) ?? mSel?.sections[0]
-      setProjectId(pSel?.id ?? "")
-      setModuleId(mSel?.id ?? "")
-      setSectionId(sSel?.id ?? "")
+      const pSel = list.find((p) => p.id === projectId) ?? list[0];
+      const mSel =
+        pSel.modules.find((m) => m.id === moduleId) ?? pSel.modules[0];
+      const sSel =
+        mSel?.sections.find((s) => s.id === sectionId) ?? mSel?.sections[0];
+      setProjectId(pSel?.id ?? "");
+      setModuleId(mSel?.id ?? "");
+      setSectionId(sSel?.id ?? "");
     } catch {}
-  }, [organizationId, projectId, moduleId, sectionId])
+  }, [organizationId, projectId, moduleId, sectionId]);
 
   const slugify = (str: string) =>
     str
@@ -658,35 +903,41 @@ export default function TestCaseLabPage() {
       .replace(/[^a-z0-9\s-]/g, "")
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
-      .slice(0, 64)
+      .slice(0, 64);
 
   const openDuplicateModule = (mod: Module) => {
-    setDupBase(mod)
-    setDupName(`${mod.name} Copy`)
-    setDupOpen(true)
-  }
+    setDupBase(mod);
+    setDupName(`${mod.name} Copy`);
+    setDupOpen(true);
+  };
 
   const duplicateModule = async () => {
-    if (!organizationId || !project || !dupBase) return
-    const newName = dupName.trim()
-    const newId = slugify(newName)
-    if (!newId) return
+    if (!organizationId || !project || !dupBase) return;
+    const newName = dupName.trim();
+    const newId = slugify(newName);
+    if (!newId) return;
     // optimistic update
-    setProjects((prev) => prev.map((p) => {
-      if (p.id !== project.id) return p
-      const src = p.modules.find((m) => m.id === dupBase.id)
-      if (!src) return p
-      const copy: Module = {
-        id: newId,
-        name: newName,
-        sections: src.sections.map((s) => ({ id: s.id, name: s.name, steps: s.steps.map((st) => ({ ...st })) })),
-      }
-      return { ...p, modules: [...p.modules, copy] }
-    }))
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id !== project.id) return p;
+        const src = p.modules.find((m) => m.id === dupBase.id);
+        if (!src) return p;
+        const copy: Module = {
+          id: newId,
+          name: newName,
+          sections: src.sections.map((s) => ({
+            id: s.id,
+            name: s.name,
+            steps: s.steps.map((st) => ({ ...st })),
+          })),
+        };
+        return { ...p, modules: [...p.modules, copy] };
+      }),
+    );
     try {
-      await fetch('/api/projects/module/clone', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      await fetch("/api/projects/module/clone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           organizationId,
           projectId: project.id,
@@ -694,192 +945,251 @@ export default function TestCaseLabPage() {
           newModuleId: newId,
           newName,
         }),
-      })
+      });
     } finally {
-      setDupOpen(false)
-      setDupBase(null)
-      setDupName("")
-      refreshProjectsPreserve()
+      setDupOpen(false);
+      setDupBase(null);
+      setDupName("");
+      refreshProjectsPreserve();
     }
-  }
+  };
 
-  const jiraEnabled = Boolean(jiraConfig?.enabled)
-  const jiraBadgeClassName = useMemo(
+  const integrationProvider = integrationsConfig?.provider ?? "none";
+  const integrationEnabled = integrationProvider !== "none";
+  const integrationProviderLabel =
+    integrationProvider === "clickup" ? "ClickUp"
+    : integrationProvider === "jira" ? "Jira"
+    : "Issue integration";
+  const integrationBadgeClassName = useMemo(
     () =>
       [
-        jiraEnabled ? '' : 'border-destructive/60 text-destructive',
-        jiraConfigLoading ? 'opacity-80' : '',
+        integrationEnabled ? "" : "border-destructive/60 text-destructive",
+        integrationsLoading ? "opacity-80" : "",
       ]
         .filter(Boolean)
-        .join(' '),
-    [jiraEnabled, jiraConfigLoading],
-  )
-  const jiraUpdatedAtLabel = useMemo(() => {
-    if (!jiraConfig?.updatedAt) return ''
-    const date = new Date(jiraConfig.updatedAt)
-    return Number.isNaN(date.getTime()) ? '' : date.toLocaleString()
-  }, [jiraConfig?.updatedAt])
+        .join(" "),
+    [integrationEnabled, integrationsLoading],
+  );
+  const integrationUpdatedAtLabel = useMemo(() => {
+    const updatedAt =
+      integrationProvider === "jira" ? integrationsConfig?.jira.updatedAt
+      : integrationProvider === "clickup" ?
+        integrationsConfig?.clickup.updatedAt
+      : null;
+    if (!updatedAt) return "";
+    const date = new Date(updatedAt);
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleString();
+  }, [
+    integrationProvider,
+    integrationsConfig?.jira.updatedAt,
+    integrationsConfig?.clickup.updatedAt,
+  ]);
 
-  const seedJiraForm = (
-    config?: OrganizationJiraConfig | null,
-    opts?: { forceEnable?: boolean },
+  const seedIntegrationsForm = (
+    config?: OrganizationIntegrationsConfig | null,
+    opts?: { forceProvider?: Exclude<IssueProvider, "none"> },
   ) => {
-    const source = typeof config === 'undefined' ? jiraConfig : config
-    setJiraForm({
-      enabled:
-        typeof opts?.forceEnable === 'boolean'
-          ? opts.forceEnable
-          : source?.enabled ?? false,
-      baseUrl: source?.baseUrl ?? '',
-      email: source?.email ?? '',
-      projectKey: source?.projectKey ?? '',
-      issueType: source?.issueType ?? 'Task',
-      apiToken: '',
-    })
-  }
+    const source = typeof config === "undefined" ? integrationsConfig : config;
+    setIntegrationsForm({
+      provider: opts?.forceProvider ?? source?.provider ?? "none",
+      jira: {
+        baseUrl: source?.jira.baseUrl ?? "",
+        email: source?.jira.email ?? "",
+        projectKey: source?.jira.projectKey ?? "",
+        issueType: source?.jira.issueType ?? "Task",
+        apiToken: "",
+      },
+      clickup: {
+        listId: source?.clickup.listId ?? "",
+        status: source?.clickup.status ?? "",
+        apiToken: "",
+      },
+    });
+  };
 
-  const openJiraDialog = (opts?: { forceEnable?: boolean }) => {
-    if (!canManageOrganization) return
-    seedJiraForm(undefined, opts)
-    setJiraDialogError('')
-    setJiraDialogOpen(true)
-  }
+  const openIntegrationsDialog = (opts?: {
+    forceProvider?: Exclude<IssueProvider, "none">;
+  }) => {
+    if (!canManageOrganization) return;
+    seedIntegrationsForm(undefined, opts);
+    setIntegrationsDialogError("");
+    setIntegrationsDialogOpen(true);
+  };
 
-  const closeJiraDialog = (config?: OrganizationJiraConfig | null) => {
-    seedJiraForm(config)
-    setJiraDialogError('')
-    setJiraDialogOpen(false)
-  }
+  const closeIntegrationsDialog = (
+    config?: OrganizationIntegrationsConfig | null,
+  ) => {
+    seedIntegrationsForm(config);
+    setIntegrationsDialogError("");
+    setIntegrationsDialogOpen(false);
+  };
 
-  const handleSaveJiraConfig = async () => {
-    if (!organizationId || !canManageOrganization) return
-    setJiraDialogError('')
-    setJiraSaving(true)
-    const wasEnabled = jiraEnabled
+  const handleSaveIntegrationsConfig = async () => {
+    if (!organizationId || !canManageOrganization) return;
+    setIntegrationsDialogError("");
+    setIntegrationsSaving(true);
+    const previousProvider = integrationProvider;
     const payload = {
-      enabled: jiraForm.enabled,
-      baseUrl: jiraForm.baseUrl.trim(),
-      email: jiraForm.email.trim(),
-      projectKey: jiraForm.projectKey.trim(),
-      issueType: jiraForm.issueType.trim() || 'Task',
-      apiToken: jiraForm.apiToken.trim(),
-    }
+      provider: integrationsForm.provider,
+      jira: {
+        baseUrl: integrationsForm.jira.baseUrl.trim(),
+        email: integrationsForm.jira.email.trim(),
+        projectKey: integrationsForm.jira.projectKey.trim(),
+        issueType: integrationsForm.jira.issueType.trim() || "Task",
+        apiToken: integrationsForm.jira.apiToken.trim(),
+      },
+      clickup: {
+        listId: integrationsForm.clickup.listId.trim(),
+        status: integrationsForm.clickup.status.trim(),
+        apiToken: integrationsForm.clickup.apiToken.trim(),
+      },
+    };
     try {
-      const res = await fetch(`/api/organizations/${organizationId}/jira`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          enabled: payload.enabled,
-          baseUrl: payload.baseUrl,
-          email: payload.email,
-          projectKey: payload.projectKey,
-          issueType: payload.issueType,
-          apiToken: payload.apiToken,
-        }),
-      })
-      let responseBody: unknown = null
+      const res = await fetch(
+        `/api/organizations/${organizationId}/integrations`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      let responseBody: unknown = null;
       try {
-        responseBody = await res.json()
+        responseBody = await res.json();
       } catch {}
       if (!res.ok) {
         const message =
-          typeof (responseBody as { error?: unknown } | null)?.error === 'string'
-            ? (responseBody as { error?: string }).error
-            : 'Failed to update Jira settings'
-        throw new Error(message)
+          (
+            typeof (responseBody as { error?: unknown } | null)?.error ===
+            "string"
+          ) ?
+            (responseBody as { error?: string }).error
+          : "Failed to update integration settings";
+        throw new Error(message);
       }
-      const next = normalizeJiraConfig((responseBody as { jira?: unknown } | null)?.jira)
-      setJiraConfig(next)
-      closeJiraDialog(next)
-      const toastMessage = next?.enabled
-        ? wasEnabled
-          ? 'Jira integration updated'
-          : 'Jira integration enabled'
-        : wasEnabled
-          ? 'Jira integration disabled'
-          : 'Jira integration updated'
+      const next = normalizeIntegrationsConfig(
+        (responseBody as { integrations?: unknown } | null)?.integrations,
+      );
+      setIntegrationsConfig(next);
+      closeIntegrationsDialog(next);
+      const nextProvider = next?.provider ?? "none";
+      const nextLabel =
+        nextProvider === "clickup" ? "ClickUp"
+        : nextProvider === "jira" ? "Jira"
+        : "Issue";
+      const toastMessage =
+        nextProvider === "none" ?
+          previousProvider === "none" ?
+            "Issue integration updated"
+          : "Issue integration disabled"
+        : previousProvider === nextProvider ? `${nextLabel} integration updated`
+        : `${nextLabel} integration enabled`;
       toast.success(toastMessage, {
-        position: 'bottom-right',
-      })
+        position: "bottom-right",
+      });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update Jira settings'
-      setJiraDialogError(message)
+      const message =
+        error instanceof Error ?
+          error.message
+        : "Failed to update integration settings";
+      setIntegrationsDialogError(message);
     } finally {
-      setJiraSaving(false)
+      setIntegrationsSaving(false);
     }
-  }
+  };
 
-  const renderJiraBadge = () => {
-    if (!organizationId) return null
+  const renderIntegrationsBadge = () => {
+    if (!organizationId) return null;
     if (canManageOrganization) {
       return (
         <button
           type="button"
-          onClick={() => openJiraDialog(jiraEnabled ? undefined : { forceEnable: true })}
-          disabled={jiraConfigLoading}
+          onClick={() => openIntegrationsDialog()}
+          disabled={integrationsLoading}
           className={`group inline-flex items-center gap-2 rounded-full border px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
-            jiraEnabled
-              ? 'border-emerald-500/80 text-emerald-400 hover:bg-emerald-500/10'
-              : 'border-destructive/60 text-destructive hover:bg-destructive/10'
-          } ${jiraConfigLoading ? 'opacity-80' : ''}`}
-          title={jiraEnabled ? 'Manage Jira integration' : 'Enable Jira integration'}
+            integrationEnabled ?
+              "border-emerald-500/80 text-emerald-400 hover:bg-emerald-500/10"
+            : "border-destructive/60 text-destructive hover:bg-destructive/10"
+          } ${integrationsLoading ? "opacity-80" : ""}`}
+          title="Manage issue integration"
         >
-          {jiraConfigLoading ? (
+          {integrationsLoading ?
             <>
               <Loader2 className="size-3 animate-spin" />
-              <span>Checking Jira…</span>
+              <span>Checking integrations…</span>
             </>
-          ) : (
-            <>
-              <span className={`inline-flex h-2 w-2 rounded-full ${jiraEnabled ? 'bg-emerald-400' : 'bg-destructive'}`} />
-              <span className="uppercase tracking-wide">Jira</span>
-              <span className="sr-only">Jira {jiraEnabled ? 'enabled' : 'disabled'}</span>
+          : <>
+              <span
+                className={`inline-flex h-2 w-2 rounded-full ${integrationEnabled ? "bg-emerald-400" : "bg-destructive"}`}
+              />
+              <span className="uppercase tracking-wide">
+                {integrationEnabled ? integrationProviderLabel : " integration"}
+              </span>
+              <span className="sr-only">
+                {integrationEnabled ?
+                  `${integrationProviderLabel} enabled`
+                : "Issue integration disabled"}
+              </span>
               <Switch
                 aria-hidden="true"
-                checked={jiraEnabled}
+                checked={integrationEnabled}
                 disabled
                 className="pointer-events-none border border-border/10 bg-muted/90 transition-colors group-hover:bg-muted/30 data-[state=checked]:border-emerald-300/40 data-[state=checked]:bg-emerald-400"
               />
             </>
-          )}
+          }
         </button>
-      )
+      );
     }
     return (
       <Badge
-        variant={jiraEnabled ? 'secondary' : 'outline'}
-        className={jiraBadgeClassName}
-        title={jiraEnabled ? 'Jira integration is enabled for this organization' : 'Jira integration is disabled for this organization'}
+        variant={integrationEnabled ? "secondary" : "outline"}
+        className={integrationBadgeClassName}
+        title={
+          integrationEnabled ?
+            `${integrationProviderLabel} is enabled for this organization`
+          : "Issue integration is disabled for this organization"
+        }
       >
-        {jiraConfigLoading ? (
+        {integrationsLoading ?
           <>
             <Loader2 className="size-3 animate-spin" />
-            Checking Jira…
+            Checking integrations…
           </>
-        ) : (
-          <>Jira {jiraEnabled ? 'enabled' : 'disabled'}</>
-        )}
+        : <>
+            {integrationEnabled ?
+              `${integrationProviderLabel} enabled`
+            : "No integration"}
+          </>
+        }
       </Badge>
-    )
-  }
+    );
+  };
 
   const startEdit = (st: TestStep) => {
-    setEditingStepId(st.id)
-    setEditTitle(st.title)
-    setEditDesc(st.description)
-    setEditExpectedResults(st.expectedResults ?? "")
-  }
+    setEditingStepId(st.id);
+    setEditTitle(st.title);
+    setEditDesc(st.description);
+    setEditExpectedResults(st.expectedResults ?? "");
+  };
 
   const discardEdit = () => {
-    setDiscardOpen(false)
-    setEditingStepId(null)
-    setEditTitle("")
-    setEditDesc("")
-    setEditExpectedResults("")
-  }
+    setDiscardOpen(false);
+    setEditingStepId(null);
+    setEditTitle("");
+    setEditDesc("");
+    setEditExpectedResults("");
+  };
 
   const saveEdit = async () => {
-    if (!organizationId || !project || !activeModule || !activeSection || !editingStepId) return
+    if (
+      !organizationId ||
+      !project ||
+      !activeModule ||
+      !activeSection ||
+      !editingStepId
+    )
+      return;
     const payload = {
       organizationId,
       projectId: project.id,
@@ -889,77 +1199,90 @@ export default function TestCaseLabPage() {
       title: editTitle.trim(),
       description: editDesc.trim(),
       expectedResults: editExpectedResults.trim(),
-    }
-    if (!payload.title || !payload.description) return
+    };
+    if (!payload.title || !payload.description) return;
     try {
-      await fetch('/api/projects/step', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      await fetch("/api/projects/step", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      })
+      });
       // Optimistically update local projects tree
-      setProjects((prev) => prev.map((p) => {
-        if (p.id !== payload.projectId) return p
-        return {
-          ...p,
-          modules: p.modules.map((m) => {
-            if (m.id !== payload.moduleId) return m
-            return {
-              ...m,
-              sections: m.sections.map((s) => {
-                if (s.id !== payload.sectionId) return s
-                return {
-                  ...s,
-                  steps: s.steps.map((x) => (
-                    x.id === payload.stepId
-                      ? {
+      setProjects((prev) =>
+        prev.map((p) => {
+          if (p.id !== payload.projectId) return p;
+          return {
+            ...p,
+            modules: p.modules.map((m) => {
+              if (m.id !== payload.moduleId) return m;
+              return {
+                ...m,
+                sections: m.sections.map((s) => {
+                  if (s.id !== payload.sectionId) return s;
+                  return {
+                    ...s,
+                    steps: s.steps.map((x) =>
+                      x.id === payload.stepId ?
+                        {
                           ...x,
                           title: payload.title,
                           description: payload.description,
                           expectedResults: payload.expectedResults,
                         }
-                      : x
-                  )),
-                }
-              })
-            }
-          })
-        }
-      }))
-      setEditingStepId(null)
-      setEditTitle("")
-      setEditDesc("")
+                      : x,
+                    ),
+                  };
+                }),
+              };
+            }),
+          };
+        }),
+      );
+      setEditingStepId(null);
+      setEditTitle("");
+      setEditDesc("");
     } catch {}
-  }
+  };
 
   const startEditComment = (stepId: string) => {
-    setEditingCommentStepId(stepId)
-    setCommentDraft(getStepComment(sectionKey, stepId))
-  }
+    setEditingCommentStepId(stepId);
+    setCommentDraft(getStepComment(sectionKey, stepId));
+  };
 
   const cancelEditComment = () => {
-    setEditingCommentStepId(null)
-    setCommentDraft("")
-  }
+    setEditingCommentStepId(null);
+    setCommentDraft("");
+  };
 
   const saveComment = async (stepId: string) => {
-    if (!organizationId || !project || !activeModule || !activeSection || !sectionKey) { cancelEditComment(); return }
-    const comment = commentDraft.trim()
+    if (
+      !organizationId ||
+      !project ||
+      !activeModule ||
+      !activeSection ||
+      !sectionKey
+    ) {
+      cancelEditComment();
+      return;
+    }
+    const comment = commentDraft.trim();
     // optimistic local update (preserve current status)
     setRuns((prev) => ({
       ...prev,
       [sectionKey]: {
         ...prev[sectionKey],
         [stepId]: {
-          ...(prev[sectionKey]?.[stepId] ?? { status: "blocked" as StepStatus }),
+          ...(prev[sectionKey]?.[stepId] ?? {
+            status: "blocked" as StepStatus,
+          }),
           comment,
         },
       },
-    }))
+    }));
     try {
-      await fetch('/api/runs', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      await fetch("/api/runs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           organizationId,
           projectId: project.id,
@@ -969,457 +1292,562 @@ export default function TestCaseLabPage() {
           status: getStepStatus(sectionKey, stepId),
           comment,
         }),
-      })
+      });
     } finally {
-      cancelEditComment()
+      cancelEditComment();
     }
-  }
+  };
 
   // old duplicateModule(mod) removed; using openDuplicateModule + duplicateModule()
 
-  const requestDelete = (target: { type: 'project'|'module'|'section'|'step'; id: string; name: string }) => {
-    setDeleteTarget(target)
-    setDeleteOpen(true)
-  }
+  const requestDelete = (target: {
+    type: "project" | "module" | "section" | "step";
+    id: string;
+    name: string;
+  }) => {
+    setDeleteTarget(target);
+    setDeleteOpen(true);
+  };
 
   const performDelete = async () => {
-    if (!organizationId || !project || !deleteTarget) return
+    if (!organizationId || !project || !deleteTarget) return;
     try {
-      if (deleteTarget.type === 'project') {
-        await fetch('/api/projects', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
+      if (deleteTarget.type === "project") {
+        await fetch("/api/projects", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ organizationId, projectId: deleteTarget.id }),
-        })
-      } else if (deleteTarget.type === 'module') {
-        await fetch('/api/projects/module', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ organizationId, projectId: project.id, moduleId: deleteTarget.id }),
-        })
-      } else if (deleteTarget.type === 'section') {
-        await fetch('/api/projects/section', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ organizationId, projectId: project.id, moduleId: activeModule?.id, sectionId: deleteTarget.id }),
-        })
-      } else if (deleteTarget.type === 'step') {
-        await fetch('/api/projects/step', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ organizationId, projectId: project.id, moduleId: activeModule?.id, sectionId: activeSection?.id, stepId: deleteTarget.id }),
-        })
+        });
+      } else if (deleteTarget.type === "module") {
+        await fetch("/api/projects/module", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizationId,
+            projectId: project.id,
+            moduleId: deleteTarget.id,
+          }),
+        });
+      } else if (deleteTarget.type === "section") {
+        await fetch("/api/projects/section", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizationId,
+            projectId: project.id,
+            moduleId: activeModule?.id,
+            sectionId: deleteTarget.id,
+          }),
+        });
+      } else if (deleteTarget.type === "step") {
+        await fetch("/api/projects/step", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizationId,
+            projectId: project.id,
+            moduleId: activeModule?.id,
+            sectionId: activeSection?.id,
+            stepId: deleteTarget.id,
+          }),
+        });
       }
-      setDeleteOpen(false)
-      setDeleteTarget(null)
-      await refreshProjectsPreserve()
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+      await refreshProjectsPreserve();
     } catch {
-      setDeleteOpen(false)
-      setDeleteTarget(null)
+      setDeleteOpen(false);
+      setDeleteTarget(null);
     }
-  }
+  };
 
   const quickPassSection = () => {
-    if (!organizationId || !project || !activeModule || !activeSection) return
-    const key = getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
-    const beforeAllPassed = activeSection.steps.every((st) => getStepStatus(key, st.id) === "passed")
+    if (!organizationId || !project || !activeModule || !activeSection) return;
+    const key = getSectionKey(
+      organizationId,
+      project.id,
+      activeModule.id,
+      activeSection.id,
+    );
+    const beforeAllPassed = activeSection.steps.every(
+      (st) => getStepStatus(key, st.id) === "passed",
+    );
     setRuns((prev) => ({
       ...prev,
-      [key]: activeSection.steps.reduce<Record<string, StepRun>>((acc, st) => {
-        acc[st.id] = { ...(prev[key]?.[st.id] ?? { status: "untested" }), status: "passed" }
-        return acc
-      }, { ...(prev[key] ?? {}) }),
-    }))
+      [key]: activeSection.steps.reduce<Record<string, StepRun>>(
+        (acc, st) => {
+          acc[st.id] = {
+            ...(prev[key]?.[st.id] ?? { status: "untested" }),
+            status: "passed",
+          };
+          return acc;
+        },
+        { ...(prev[key] ?? {}) },
+      ),
+    }));
     // persist in background
     Promise.all(
       activeSection.steps.map((st) =>
         fetch(`/api/runs`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             organizationId,
             projectId: project.id,
             moduleId: activeModule.id,
             sectionId: activeSection.id,
             stepId: st.id,
-            status: 'passed',
+            status: "passed",
           }),
-        }).catch(() => undefined)
-      )
-    ).catch(() => undefined)
+        }).catch(() => undefined),
+      ),
+    ).catch(() => undefined);
     if (!beforeAllPassed && activeSection.steps.length > 0) {
-      setSectionCompleteName(activeSection.name)
-      setSectionCompleteOpen(true)
+      setSectionCompleteName(activeSection.name);
+      setSectionCompleteOpen(true);
     }
-  }
+  };
 
   useEffect(() => {
-    loadOrganizations()
-  }, [loadOrganizations])
+    loadOrganizations();
+  }, [loadOrganizations]);
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     if (!organizationId) {
-      setJiraConfig(null)
-      setJiraConfigLoading(false)
-      setJiraDialogError("")
-      return
+      setIntegrationsConfig(null);
+      setIntegrationsLoading(false);
+      setIntegrationsDialogError("");
+      return;
     }
-    setJiraConfigLoading(true)
-    setJiraDialogError("")
+    setIntegrationsLoading(true);
+    setIntegrationsDialogError("");
     const run = async () => {
       try {
-        const res = await fetch(`/api/organizations/${organizationId}/jira`)
-        let payload: unknown = null
+        const res = await fetch(
+          `/api/organizations/${organizationId}/integrations`,
+        );
+        let payload: unknown = null;
         try {
-          payload = await res.json()
+          payload = await res.json();
         } catch {}
-        if (cancelled) return
+        if (cancelled) return;
         if (!res.ok) {
-          setJiraConfig(null)
-          return
+          setIntegrationsConfig(null);
+          return;
         }
-        const next = normalizeJiraConfig((payload as { jira?: unknown } | null)?.jira)
-        setJiraConfig(next)
+        const next = normalizeIntegrationsConfig(
+          (payload as { integrations?: unknown } | null)?.integrations,
+        );
+        setIntegrationsConfig(next);
       } catch {
-        if (!cancelled) setJiraConfig(null)
+        if (!cancelled) setIntegrationsConfig(null);
       } finally {
-        if (!cancelled) setJiraConfigLoading(false)
+        if (!cancelled) setIntegrationsLoading(false);
       }
-    }
-    run()
+    };
+    run();
     return () => {
-      cancelled = true
-    }
-  }, [organizationId])
+      cancelled = true;
+    };
+  }, [organizationId]);
 
   useEffect(() => {
-    setRuns({})
-    setProjectId("")
-    setModuleId("")
-    setSectionId("")
-  }, [organizationId])
+    setRuns({});
+    setProjectId("");
+    setModuleId("");
+    setSectionId("");
+  }, [organizationId]);
 
   const handleCreateOrganization = async () => {
-    const id = organizationFormId.trim()
-    const name = organizationFormName.trim()
+    const id = organizationFormId.trim();
+    const name = organizationFormName.trim();
     if (!id || !name) {
-      setOrganizationFormError("Organization id and name are required")
-      return
+      setOrganizationFormError("Organization id and name are required");
+      return;
     }
-    setOrganizationFormSubmitting(true)
-    setOrganizationFormError("")
+    setOrganizationFormSubmitting(true);
+    setOrganizationFormError("");
     try {
-      const res = await fetch('/api/organizations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/organizations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, name }),
-      })
-      const data = await res.json()
+      });
+      const data = await res.json();
       if (!res.ok) {
-        throw new Error(data?.error || 'Failed to create organization')
+        throw new Error(data?.error || "Failed to create organization");
       }
-      setOrganizationId(id)
-      await loadOrganizations()
-      setOrganizationFormId("")
-      setOrganizationFormName("")
-      setOrganizationFormOpen(false)
+      setOrganizationId(id);
+      await loadOrganizations();
+      setOrganizationFormId("");
+      setOrganizationFormName("");
+      setOrganizationFormOpen(false);
     } catch (error) {
-      setOrganizationFormError(error instanceof Error ? error.message : 'Failed to create organization')
+      setOrganizationFormError(
+        error instanceof Error ?
+          error.message
+        : "Failed to create organization",
+      );
     } finally {
-      setOrganizationFormSubmitting(false)
+      setOrganizationFormSubmitting(false);
     }
-  }
+  };
 
   const handleCreateInvite = async () => {
-  if (!organizationId) return
-  setInviteLoading(true)
-  // setInviteFeedback(null) // już niepotrzebne
-  try {
-    const res = await fetch(`/api/organizations/${organizationId}/invite`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: project?.id }),
-    })
-    const data = await res.json()
-    if (!res.ok) {
-      throw new Error(data?.error || 'Failed to create invitation')
-    }
-
-    const token = String(data.token)
-    const link = `${window.location.origin}/invite/${token}`
-
+    if (!organizationId) return;
+    setInviteLoading(true);
+    // setInviteFeedback(null) // już niepotrzebne
     try {
-      await navigator.clipboard.writeText(link)
-      toast.success("Invitation link copied to clipboard", {
-        position: "bottom-right",
-      })
-    } catch {
-      toast("Invitation link", {
-        action: {
-          label: "Copy",
-          onClick: async () => {
-            try {
-              await navigator.clipboard.writeText(link)
-              toast.success("Copied!")
-            } catch {
-              toast.error("Copy failed — select & copy manually")
-            }
+      const res = await fetch(`/api/organizations/${organizationId}/invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project?.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to create invitation");
+      }
+
+      const token = String(data.token);
+      const link = `${window.location.origin}/invite/${token}`;
+
+      try {
+        await navigator.clipboard.writeText(link);
+        toast.success("Invitation link copied to clipboard", {
+          position: "bottom-right",
+        });
+      } catch {
+        toast("Invitation link", {
+          action: {
+            label: "Copy",
+            onClick: async () => {
+              try {
+                await navigator.clipboard.writeText(link);
+                toast.success("Copied!");
+              } catch {
+                toast.error("Copy failed — select & copy manually");
+              }
+            },
           },
-        },
-      })
+        });
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create invitation",
+      );
+    } finally {
+      setInviteLoading(false);
     }
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : "Failed to create invitation")
-  } finally {
-    setInviteLoading(false)
-  }
-}
+  };
 
   const handleExportResults = async () => {
-    if (!organizationId || !project) return
-    setExporting(true)
+    if (!organizationId || !project) return;
+    setExporting(true);
     try {
       const params = new URLSearchParams({
         organizationId,
         projectId: project.id,
-      })
-      const res = await fetch(`/api/runs/export?${params.toString()}`)
+      });
+      const res = await fetch(`/api/runs/export?${params.toString()}`);
       if (!res.ok) {
-        let message = "Failed to export results"
+        let message = "Failed to export results";
         try {
-          const data = await res.json()
-          if (typeof data?.error === "string") message = data.error
+          const data = await res.json();
+          if (typeof data?.error === "string") message = data.error;
         } catch {}
-        throw new Error(message)
+        throw new Error(message);
       }
-      const blob = await res.blob()
-      const stamp = new Date().toISOString().slice(0, 10)
-      const baseName = slugify(project.name || "test-results")
-      const fileName = `${baseName || "test-results"}-${stamp}.xlsx`
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = fileName
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
+      const blob = await res.blob();
+      const stamp = new Date().toISOString().slice(0, 10);
+      const baseName = slugify(project.name || "test-results");
+      const fileName = `${baseName || "test-results"}-${stamp}.xlsx`;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to export results"
-      toast.error(message)
+      const message =
+        error instanceof Error ? error.message : "Failed to export results";
+      toast.error(message);
     } finally {
-      setExporting(false)
+      setExporting(false);
     }
-  }
+  };
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     const load = async () => {
       if (!organizationId) {
-        setProjects([])
-        setProjectId("")
-        setModuleId("")
-        setSectionId("")
-        setRuns({})
-        setLoadingProjects(false)
-        return
+        setProjects([]);
+        setProjectId("");
+        setModuleId("");
+        setSectionId("");
+        setRuns({});
+        setLoadingProjects(false);
+        return;
       }
-      setLoadingProjects(true)
+      setLoadingProjects(true);
       try {
-        const params = new URLSearchParams({ organizationId })
-        const res = await fetch(`/api/projects?${params.toString()}`)
-        const data = await res.json()
+        const params = new URLSearchParams({ organizationId });
+        const res = await fetch(`/api/projects?${params.toString()}`);
+        const data = await res.json();
         if (!cancelled) {
-          const raw = Array.isArray(data?.projects) ? (data.projects as ApiProject[]) : []
-          const mapped = mapApiProjects(raw)
-          setProjects(mapped)
+          const raw =
+            Array.isArray(data?.projects) ?
+              (data.projects as ApiProject[])
+            : [];
+          const mapped = mapApiProjects(raw);
+          setProjects(mapped);
           if (!mapped.length) {
-            setProjectId("")
-            setModuleId("")
-            setSectionId("")
+            setProjectId("");
+            setModuleId("");
+            setSectionId("");
           }
         }
       } finally {
-        if (!cancelled) setLoadingProjects(false)
+        if (!cancelled) setLoadingProjects(false);
       }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [organizationId])
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId]);
 
   // Initialize selection when projects or organization change
   useEffect(() => {
     if (!projects.length) {
-      setProjectId("")
-      setModuleId("")
-      setSectionId("")
-      return
+      setProjectId("");
+      setModuleId("");
+      setSectionId("");
+      return;
     }
 
     const ensureProject = () => {
-      const current = projects.find((p) => p.id === projectId)
-      if (current) return current
-      return projects[0]
-    }
+      const current = projects.find((p) => p.id === projectId);
+      if (current) return current;
+      return projects[0];
+    };
 
-    const nextProject = ensureProject()
+    const nextProject = ensureProject();
     if (nextProject.id !== projectId) {
-      setProjectId(nextProject.id)
-      const firstModule = nextProject.modules[0]
-      setModuleId(firstModule?.id ?? "")
-      setSectionId(firstModule?.sections[0]?.id ?? "")
-      return
+      setProjectId(nextProject.id);
+      const firstModule = nextProject.modules[0];
+      setModuleId(firstModule?.id ?? "");
+      setSectionId(firstModule?.sections[0]?.id ?? "");
+      return;
     }
 
     if (!nextProject.modules.length) {
-      if (moduleId) setModuleId("")
-      if (sectionId) setSectionId("")
-      return
+      if (moduleId) setModuleId("");
+      if (sectionId) setSectionId("");
+      return;
     }
 
-    const currentModule = nextProject.modules.find((m) => m.id === moduleId) ?? nextProject.modules[0]
+    const currentModule =
+      nextProject.modules.find((m) => m.id === moduleId) ??
+      nextProject.modules[0];
     if (currentModule.id !== moduleId) {
-      setModuleId(currentModule.id)
-      setSectionId(currentModule.sections[0]?.id ?? "")
-      return
+      setModuleId(currentModule.id);
+      setSectionId(currentModule.sections[0]?.id ?? "");
+      return;
     }
 
     if (!currentModule.sections.length) {
-      if (sectionId) setSectionId("")
-      return
+      if (sectionId) setSectionId("");
+      return;
     }
 
     if (!currentModule.sections.some((s) => s.id === sectionId)) {
-      setSectionId(currentModule.sections[0].id)
+      setSectionId(currentModule.sections[0].id);
     }
-  }, [projects, projectId, moduleId, sectionId])
+  }, [projects, projectId, moduleId, sectionId]);
 
   // Fetch run state for active section
   useEffect(() => {
     const loadRun = async () => {
-      if (!organizationId || !project || !activeModule || !activeSection) return
-      setLoadingRun(true)
+      if (!organizationId || !project || !activeModule || !activeSection)
+        return;
+      setLoadingRun(true);
       try {
         const params = new URLSearchParams({
           organizationId,
           projectId: project.id,
           moduleId: activeModule.id,
           sectionId: activeSection.id,
-        })
-        const res = await fetch(`/api/runs?${params.toString()}`)
-        const data = await res.json()
-        const key = getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
-        const rawSteps = (data?.run?.steps ?? {}) as Record<string, RawStepRun>
-        const normalized: Record<string, StepRun> = {}
+        });
+        const res = await fetch(`/api/runs?${params.toString()}`);
+        const data = await res.json();
+        const key = getSectionKey(
+          organizationId,
+          project.id,
+          activeModule.id,
+          activeSection.id,
+        );
+        const rawSteps = (data?.run?.steps ?? {}) as Record<string, RawStepRun>;
+        const normalized: Record<string, StepRun> = {};
         for (const [id, value] of Object.entries(rawSteps)) {
           normalized[id] = {
-            status: value?.status ?? 'untested',
-            comment: typeof value?.comment === 'string' ? value.comment : undefined,
-            jiraIssue: normalizeStepIssue(value?.jiraIssue),
-          }
+            status: value?.status ?? "untested",
+            comment:
+              typeof value?.comment === "string" ? value.comment : undefined,
+            externalTask: normalizeStepIssue(value?.externalTask),
+            jiraIssue: normalizeStepIssue(value?.jiraIssue, "jira"),
+          };
         }
-        setRuns((prev) => ({ ...prev, [key]: normalized }))
+        setRuns((prev) => ({ ...prev, [key]: normalized }));
       } finally {
-        setLoadingRun(false)
+        setLoadingRun(false);
       }
-    }
-    loadRun()
-  }, [organizationId, projectId, moduleId, sectionId, project, activeModule, activeSection])
+    };
+    loadRun();
+  }, [
+    organizationId,
+    projectId,
+    moduleId,
+    sectionId,
+    project,
+    activeModule,
+    activeSection,
+  ]);
 
   // Realtime updates via Pusher
   useEffect(() => {
-    let channel: PusherChannel | null = null
-    let presence: PusherChannel | null = null
+    let channel: PusherChannel | null = null;
+    let presence: PusherChannel | null = null;
     const subscribe = async () => {
-      if (!organizationId || !project || !activeModule || !activeSection) return
+      if (!organizationId || !project || !activeModule || !activeSection)
+        return;
       try {
-        const { getPusherClient } = await import('@/lib/pusher-client')
-        const pusher = getPusherClient()
-        const name = `private-section-${organizationId}|${project.id}|${activeModule.id}|${activeSection.id}`
-        channel = pusher.subscribe(name)
-        channel.bind('step-updated', (...args: unknown[]) => {
-          const payload = parseStepUpdatedPayload(args[0])
-          if (!payload) return
-          const key = getSectionKey(organizationId, project.id, activeModule.id, activeSection.id)
+        const { getPusherClient } = await import("@/lib/pusher-client");
+        const pusher = getPusherClient();
+        const name = `private-section-${organizationId}|${project.id}|${activeModule.id}|${activeSection.id}`;
+        channel = pusher.subscribe(name);
+        channel.bind("step-updated", (...args: unknown[]) => {
+          const payload = parseStepUpdatedPayload(args[0]);
+          if (!payload) return;
+          const key = getSectionKey(
+            organizationId,
+            project.id,
+            activeModule.id,
+            activeSection.id,
+          );
           setRuns((prev) => ({
             ...prev,
             [key]: {
               ...(prev[key] ?? {}),
               [payload.stepId]: {
-                ...(prev[key]?.[payload.stepId] ?? { status: 'untested' }),
+                ...(prev[key]?.[payload.stepId] ?? { status: "untested" }),
                 status: payload.status,
-                comment: payload.comment ?? prev[key]?.[payload.stepId]?.comment,
-                jiraIssue: payload.jiraIssue ?? prev[key]?.[payload.stepId]?.jiraIssue,
+                comment:
+                  payload.comment ?? prev[key]?.[payload.stepId]?.comment,
+                externalTask:
+                  payload.externalTask ??
+                  prev[key]?.[payload.stepId]?.externalTask,
+                jiraIssue:
+                  payload.jiraIssue ?? prev[key]?.[payload.stepId]?.jiraIssue,
               },
             },
-          }))
-        })
+          }));
+        });
 
         // presence channel (viewer count)
-        const presenceName = `presence-section-${organizationId}|${project.id}|${activeModule.id}|${activeSection.id}`
-        presence = pusher.subscribe(presenceName)
+        const presenceName = `presence-section-${organizationId}|${project.id}|${activeModule.id}|${activeSection.id}`;
+        presence = pusher.subscribe(presenceName);
         const updateCount = () => {
           try {
-            const count = (presence?.members?.count as number) ?? 0
-            setViewerCount(count)
-          } catch { setViewerCount(0) }
-        }
-        presence.bind('pusher:subscription_succeeded', updateCount)
-        presence.bind('pusher:member_added', updateCount)
-        presence.bind('pusher:member_removed', updateCount)
+            const count = (presence?.members?.count as number) ?? 0;
+            setViewerCount(count);
+          } catch {
+            setViewerCount(0);
+          }
+        };
+        presence.bind("pusher:subscription_succeeded", updateCount);
+        presence.bind("pusher:member_added", updateCount);
+        presence.bind("pusher:member_removed", updateCount);
       } catch {
         // Missing NEXT_PUBLIC_PUSHER_* keys or client not available; skip realtime gracefully
-        setViewerCount(0)
+        setViewerCount(0);
       }
-    }
-    subscribe()
+    };
+    subscribe();
     return () => {
-      try { channel?.unsubscribe() } catch {}
-      try { presence?.unsubscribe() } catch {}
-      setViewerCount(0)
-    }
-  }, [organizationId, projectId, moduleId, sectionId, project, activeModule, activeSection])
+      try {
+        channel?.unsubscribe();
+      } catch {}
+      try {
+        presence?.unsubscribe();
+      } catch {}
+      setViewerCount(0);
+    };
+  }, [
+    organizationId,
+    projectId,
+    moduleId,
+    sectionId,
+    project,
+    activeModule,
+    activeSection,
+  ]);
 
   // Listen for structure updates and step changes globally; refresh/merge so UI updates live and efficent
   useEffect(() => {
-    let chan: PusherChannel | null = null
+    let chan: PusherChannel | null = null;
     const run = async () => {
-      if (!organizationId) return
+      if (!organizationId) return;
       try {
-        const { getPusherClient } = await import('@/lib/pusher-client')
-        const p = getPusherClient()
-        chan = p.subscribe(`presence-tmt-${organizationId}`)
-        chan.bind('structure-updated', (...args: unknown[]) => {
-          const payload = parseStructureUpdatedPayload(args[0])
-          if (!payload) return
-          if (payload.organizationId !== organizationId) return
-          refreshProjectsPreserve()
-        })
-        chan.bind('step-updated', (...args: unknown[]) => {
-          const payload = parseStepBroadcastPayload(args[0])
-          if (!payload) return
-          if (payload.organizationId !== organizationId) return
-          if (!project || payload.projectId !== project.id) return
-          const key = getSectionKey(payload.organizationId, payload.projectId, payload.moduleId, payload.sectionId)
+        const { getPusherClient } = await import("@/lib/pusher-client");
+        const p = getPusherClient();
+        chan = p.subscribe(`presence-tmt-${organizationId}`);
+        chan.bind("structure-updated", (...args: unknown[]) => {
+          const payload = parseStructureUpdatedPayload(args[0]);
+          if (!payload) return;
+          if (payload.organizationId !== organizationId) return;
+          refreshProjectsPreserve();
+        });
+        chan.bind("step-updated", (...args: unknown[]) => {
+          const payload = parseStepBroadcastPayload(args[0]);
+          if (!payload) return;
+          if (payload.organizationId !== organizationId) return;
+          if (!project || payload.projectId !== project.id) return;
+          const key = getSectionKey(
+            payload.organizationId,
+            payload.projectId,
+            payload.moduleId,
+            payload.sectionId,
+          );
           setRuns((prev) => ({
             ...prev,
             [key]: {
               ...(prev[key] ?? {}),
               [payload.stepId]: {
-                ...(prev[key]?.[payload.stepId] ?? { status: 'untested' }),
+                ...(prev[key]?.[payload.stepId] ?? { status: "untested" }),
                 status: payload.status,
-                comment: payload.comment ?? prev[key]?.[payload.stepId]?.comment,
-                jiraIssue: payload.jiraIssue ?? prev[key]?.[payload.stepId]?.jiraIssue,
+                comment:
+                  payload.comment ?? prev[key]?.[payload.stepId]?.comment,
+                externalTask:
+                  payload.externalTask ??
+                  prev[key]?.[payload.stepId]?.externalTask,
+                jiraIssue:
+                  payload.jiraIssue ?? prev[key]?.[payload.stepId]?.jiraIssue,
               },
             },
-          }))
-        })
+          }));
+        });
       } catch {}
-    }
-    run()
-    return () => { try { chan?.unsubscribe() } catch {} }
-  }, [organizationId, projectId, project, refreshProjectsPreserve])
+    };
+    run();
+    return () => {
+      try {
+        chan?.unsubscribe();
+      } catch {}
+    };
+  }, [organizationId, projectId, project, refreshProjectsPreserve]);
 
   if (loadingOrganizations) {
     return (
@@ -1429,7 +1857,7 @@ export default function TestCaseLabPage() {
           Loading organizations…
         </div>
       </div>
-    )
+    );
   }
 
   if (!organizations.length) {
@@ -1437,14 +1865,19 @@ export default function TestCaseLabPage() {
       <div className="h-screen w-full flex flex-col items-center justify-center p-6">
         <div className="max-w-md w-full space-y-6 text-center">
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold">Create your first workspace</h1>
+            <h1 className="text-2xl font-semibold">
+              Create your first workspace
+            </h1>
             <p className="text-sm text-muted-foreground">
-              Set up an organization to keep projects, modules, and runs scoped to your team.
+              Set up an organization to keep projects, modules, and runs scoped
+              to your team.
             </p>
           </div>
           <div className="space-y-3 text-left">
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-muted-foreground">Organization ID (slug)</span>
+              <span className="text-muted-foreground">
+                Organization ID (slug)
+              </span>
               <input
                 value={organizationFormId}
                 onChange={(e) => setOrganizationFormId(e.target.value)}
@@ -1462,26 +1895,37 @@ export default function TestCaseLabPage() {
               />
             </label>
             {organizationFormError && (
-              <div className="text-xs text-destructive">{organizationFormError}</div>
+              <div className="text-xs text-destructive">
+                {organizationFormError}
+              </div>
             )}
             <Button
               onClick={handleCreateOrganization}
-              disabled={organizationFormSubmitting || !organizationFormId.trim() || !organizationFormName.trim()}
+              disabled={
+                organizationFormSubmitting ||
+                !organizationFormId.trim() ||
+                !organizationFormName.trim()
+              }
               className="w-full"
             >
-              {organizationFormSubmitting ? <Loader2 className="size-4 animate-spin" /> : 'Create organization'}
+              {organizationFormSubmitting ?
+                <Loader2 className="size-4 animate-spin" />
+              : "Create organization"}
             </Button>
           </div>
         </div>
       </div>
-    )
+    );
   }
   return (
     <div className="h-screen w-full p-4 flex flex-col overflow-hidden">
       {/* Top bar: Project selector (left) + Back arrow (right) + live viewers */}
       <div className="mb-4 flex items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3 w-full max-w-[920px]">
-          <Select value={organizationId} onValueChange={(value) => setOrganizationId(value)}>
+          <Select
+            value={organizationId}
+            onValueChange={(value) => setOrganizationId(value)}
+          >
             <SelectTrigger className="min-w-[200px]">
               <SelectValue placeholder="Select organization" />
             </SelectTrigger>
@@ -1500,10 +1944,14 @@ export default function TestCaseLabPage() {
               size="sm"
               onClick={() => setOrganizationFormOpen((prev) => !prev)}
             >
-              {organizationFormOpen ? 'Cancel' : '+'}
+              {organizationFormOpen ? "Cancel" : "+"}
             </Button>
           )}
-          <Select value={projectId} onValueChange={handleSelectProject} disabled={!projects.length}>
+          <Select
+            value={projectId}
+            onValueChange={handleSelectProject}
+            disabled={!projects.length}
+          >
             <SelectTrigger className="min-w-[240px]">
               <SelectValue placeholder="Select project" />
             </SelectTrigger>
@@ -1528,18 +1976,18 @@ export default function TestCaseLabPage() {
             onClick={handleExportResults}
             disabled={!project || exporting}
           >
-            {exporting ? (
+            {exporting ?
               <>
                 <Loader2 className="size-4 animate-spin" />
                 Exporting...
               </>
-            ) : (
-              "Export Excel"
-            )}
+            : "Export Excel"}
           </Button>
           {canManageOrganization && (
             <Link href="/tmt/admin">
-              <Button size="sm" className="shrink-0">+ add</Button>
+              <Button size="sm" className="shrink-0">
+                + add
+              </Button>
             </Link>
           )}
           {canManageOrganization && project && (
@@ -1547,7 +1995,13 @@ export default function TestCaseLabPage() {
               size="sm"
               variant="destructive"
               className="shrink-0 inline-flex items-center gap-1.5"
-              onClick={() => requestDelete({ type: 'project', id: project.id, name: project.name })}
+              onClick={() =>
+                requestDelete({
+                  type: "project",
+                  id: project.id,
+                  name: project.name,
+                })
+              }
               disabled={!projectId}
             >
               <Trash className="size-4" />
@@ -1559,40 +2013,45 @@ export default function TestCaseLabPage() {
           <div className="flex items-center gap-3">
             {themeMounted && (
               <div className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-card/60 px-2 py-1 text-xs text-muted-foreground">
-                <Sun className={`size-3.5 ${isDarkMode ? 'text-muted-foreground/50' : 'text-foreground'}`} />
+                <Sun
+                  className={`size-3.5 ${isDarkMode ? "text-muted-foreground/50" : "text-foreground"}`}
+                />
                 <Switch
                   aria-label="Toggle color theme"
                   checked={isDarkMode}
-                  onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+                  onCheckedChange={(checked) =>
+                    setTheme(checked ? "dark" : "light")
+                  }
                   className="border border-border/40 bg-muted/80 transition-colors data-[state=checked]:bg-foreground/70 data-[state=checked]:border-foreground/40"
                 />
-                <Moon className={`size-3.5 ${isDarkMode ? 'text-foreground' : 'text-muted-foreground/50'}`} />
+                <Moon
+                  className={`size-3.5 ${isDarkMode ? "text-foreground" : "text-muted-foreground/50"}`}
+                />
               </div>
             )}
-            {renderJiraBadge()}
+            {renderIntegrationsBadge()}
             {canManageOrganization && (
               <button
                 type="button"
                 onClick={handleCreateInvite}
                 disabled={inviteLoading}
                 className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
-                  inviteLoading
-                    ? 'border-muted/40 text-muted-foreground opacity-80'
-                    : 'border-primary/60 text-primary hover:bg-primary/10'
+                  inviteLoading ?
+                    "border-muted/40 text-muted-foreground opacity-80"
+                  : "border-primary/60 text-primary hover:bg-primary/10"
                 }`}
                 title="Generate invite link"
               >
-                {inviteLoading ? (
+                {inviteLoading ?
                   <>
                     <Loader2 className="size-3 animate-spin" />
                     <span>Generating…</span>
                   </>
-                ) : (
-                  <>
+                : <>
                     <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
                     <span className="tracking-wide">Invite</span>
                   </>
-                )}
+                }
               </button>
             )}
             {/* <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
@@ -1602,14 +2061,21 @@ export default function TestCaseLabPage() {
               </span>
               <span>{viewerCount || 0} viewing</span>
             </div> */}
-            <Link href="/" aria-label="Back to home" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link
+              href="/"
+              aria-label="Back to home"
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
               <ArrowLeft className="size-4" />
               <span className="sr-only">Back</span>
             </Link>
             <SignedIn>
               <div className="flex items-center gap-2 pl-1">
                 <NotificationsBell />
-                <UserButton appearance={{ elements: { userButtonAvatarBox: "size-9" } }} afterSignOutUrl="/" />
+                <UserButton
+                  appearance={{ elements: { userButtonAvatarBox: "size-9" } }}
+                  afterSignOutUrl="/"
+                />
               </div>
             </SignedIn>
           </div>
@@ -1617,7 +2083,9 @@ export default function TestCaseLabPage() {
       </div>
       {organizationFormOpen && canManageOrganization && (
         <div className="mb-4 w-full max-w-[640px] rounded-lg border bg-background p-4">
-          <div className="text-sm font-medium mb-2">Create new organization</div>
+          <div className="text-sm font-medium mb-2">
+            Create new organization
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-muted-foreground">Organization ID</span>
@@ -1639,22 +2107,30 @@ export default function TestCaseLabPage() {
             </label>
           </div>
           {organizationFormError && (
-            <div className="mt-2 text-xs text-destructive">{organizationFormError}</div>
+            <div className="mt-2 text-xs text-destructive">
+              {organizationFormError}
+            </div>
           )}
           <div className="mt-3 flex items-center gap-2">
             <Button
               size="sm"
               onClick={handleCreateOrganization}
-              disabled={organizationFormSubmitting || !organizationFormId.trim() || !organizationFormName.trim()}
+              disabled={
+                organizationFormSubmitting ||
+                !organizationFormId.trim() ||
+                !organizationFormName.trim()
+              }
             >
-              {organizationFormSubmitting ? <Loader2 className="size-4 animate-spin" /> : 'Create'}
+              {organizationFormSubmitting ?
+                <Loader2 className="size-4 animate-spin" />
+              : "Create"}
             </Button>
             <Button
               size="sm"
               variant="ghost"
               onClick={() => {
-                setOrganizationFormOpen(false)
-                setOrganizationFormError("")
+                setOrganizationFormOpen(false);
+                setOrganizationFormError("");
               }}
             >
               Cancel
@@ -1673,18 +2149,22 @@ export default function TestCaseLabPage() {
         )}
         {/* Modules sidebar */}
         <aside className="w-[260px] shrink-0 rounded-lg border h-full flex flex-col bg-card/40">
-          <div className="border-b px-4 py-3 text-sm font-medium flex items-center min-h-[3.5rem]">Modules</div>
+          <div className="border-b px-4 py-3 text-sm font-medium flex items-center min-h-[3.5rem]">
+            Modules
+          </div>
           <div className="flex-1 overflow-y-auto">
             <div className="py-0">
               <div className="flex flex-col">
                 {filteredModules.map((m) => {
-                  const active = m.id === moduleId
+                  const active = m.id === moduleId;
                   return (
                     <button
                       key={m.id}
                       onClick={() => handleSelectModule(m.id)}
                       className={`relative flex w-full items-center justify-between gap-3 px-4 py-3 text-sm transition-colors border-b last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 ${
-                        active ? 'bg-accent/40 text-foreground' : 'hover:bg-accent/20 text-muted-foreground'
+                        active ?
+                          "bg-accent/40 text-foreground"
+                        : "hover:bg-accent/20 text-muted-foreground"
                       }`}
                     >
                       <span className="truncate font-medium text-left">
@@ -1693,7 +2173,10 @@ export default function TestCaseLabPage() {
                       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                         <button
                           aria-label="Duplicate module"
-                          onClick={(e) => { e.stopPropagation(); openDuplicateModule(m) }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDuplicateModule(m);
+                          }}
                           className="inline-flex items-center justify-center rounded-md border border-transparent p-1.5 hover:bg-accent hover:text-foreground transition-colors"
                           title="Duplicate module"
                         >
@@ -1701,7 +2184,14 @@ export default function TestCaseLabPage() {
                         </button>
                         <button
                           aria-label="Delete module"
-                          onClick={(e) => { e.stopPropagation(); requestDelete({ type: 'module', id: m.id, name: m.name }) }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            requestDelete({
+                              type: "module",
+                              id: m.id,
+                              name: m.name,
+                            });
+                          }}
                           className="inline-flex items-center justify-center rounded-md border border-transparent p-1.5 hover:bg-destructive/10 hover:text-destructive transition-colors"
                           title="Delete module"
                         >
@@ -1709,10 +2199,12 @@ export default function TestCaseLabPage() {
                         </button>
                       </span>
                     </button>
-                  )
+                  );
                 })}
                 {!filteredModules.length && (
-                  <div className="px-4 py-6 text-xs text-muted-foreground">No modules</div>
+                  <div className="px-4 py-6 text-xs text-muted-foreground">
+                    No modules
+                  </div>
                 )}
               </div>
             </div>
@@ -1731,19 +2223,21 @@ export default function TestCaseLabPage() {
                   role="progressbar"
                   aria-valuemin={0}
                   aria-valuemax={moduleProgress.total}
-                  aria-valuenow={moduleProgress.total - moduleProgress.counts.untested}
+                  aria-valuenow={
+                    moduleProgress.total - moduleProgress.counts.untested
+                  }
                   aria-valuetext={progressSegments
                     .map((segment) =>
-                      moduleProgress.total > 0
-                        ? `${segment.label} ${segment.count}/${moduleProgress.total}`
-                        : `${segment.label} ${segment.count}`,
+                      moduleProgress.total > 0 ?
+                        `${segment.label} ${segment.count}/${moduleProgress.total}`
+                      : `${segment.label} ${segment.count}`,
                     )
                     .join(", ")}
                   title={progressSegments
                     .map((segment) =>
-                      moduleProgress.total > 0
-                        ? `${segment.label}: ${segment.count}/${moduleProgress.total}`
-                        : `${segment.label}: ${segment.count}`,
+                      moduleProgress.total > 0 ?
+                        `${segment.label}: ${segment.count}/${moduleProgress.total}`
+                      : `${segment.label}: ${segment.count}`,
                     )
                     .join(" | ")}
                 >
@@ -1760,11 +2254,20 @@ export default function TestCaseLabPage() {
               <HoverCardContent className="text-xs w-auto py-2 px-3 space-y-1">
                 <div className="font-medium">Progress</div>
                 {progressSegments.map((segment) => (
-                  <div key={segment.key} className="flex items-center justify-between gap-4 whitespace-nowrap">
-                    <span className="text-muted-foreground">{segment.label}</span>
+                  <div
+                    key={segment.key}
+                    className="flex items-center justify-between gap-4 whitespace-nowrap"
+                  >
+                    <span className="text-muted-foreground">
+                      {segment.label}
+                    </span>
                     <span>
-                      {moduleProgress.total > 0 ? `${segment.count}/${moduleProgress.total}` : segment.count}
-                      {moduleProgress.total > 0 ? ` (${Math.round(segment.pct)}%)` : ""}
+                      {moduleProgress.total > 0 ?
+                        `${segment.count}/${moduleProgress.total}`
+                      : segment.count}
+                      {moduleProgress.total > 0 ?
+                        ` (${Math.round(segment.pct)}%)`
+                      : ""}
                     </span>
                   </div>
                 ))}
@@ -1774,19 +2277,27 @@ export default function TestCaseLabPage() {
                 </div>
               </HoverCardContent>
             </HoverCard>
-            <div className="border-b px-4 py-3 text-sm font-medium flex items-center min-h-[3.5rem]">Sections</div>
+            <div className="border-b px-4 py-3 text-sm font-medium flex items-center min-h-[3.5rem]">
+              Sections
+            </div>
             <div className="divide-y flex-1 overflow-y-auto">
               {filteredSections.map((sec) => {
-                const sStatus = computeSectionStatus(sec)
-                const stepsPassed = project && activeModule && organizationId
-                  ? sec.steps.filter(
+                const sStatus = computeSectionStatus(sec);
+                const stepsPassed =
+                  project && activeModule && organizationId ?
+                    sec.steps.filter(
                       (st) =>
                         getStepStatus(
-                          getSectionKey(organizationId, project.id, activeModule.id, sec.id),
+                          getSectionKey(
+                            organizationId,
+                            project.id,
+                            activeModule.id,
+                            sec.id,
+                          ),
                           st.id,
                         ) === "passed",
                     ).length
-                  : 0
+                  : 0;
                 return (
                   <div
                     key={sec.id}
@@ -1794,9 +2305,9 @@ export default function TestCaseLabPage() {
                     tabIndex={0}
                     onClick={() => setSectionId(sec.id)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
+                      if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setSectionId(sec.id)
+                        setSectionId(sec.id);
                       }
                     }}
                     className={`group w-full px-4 py-3 text-left hover:bg-accent/30 transition-colors ${
@@ -1808,12 +2319,18 @@ export default function TestCaseLabPage() {
                       <div className="flex items-center gap-2">
                         {statusBadge(sStatus)}
                         <div className="text-xs text-muted-foreground">
-                          {stepsPassed}
-                          /{sec.steps.length}
+                          {stepsPassed}/{sec.steps.length}
                         </div>
                         <button
                           aria-label="Delete section"
-                          onClick={(e) => { e.stopPropagation(); requestDelete({ type: 'section', id: sec.id, name: sec.name }) }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            requestDelete({
+                              type: "section",
+                              id: sec.id,
+                              name: sec.name,
+                            });
+                          }}
                           className="inline-flex p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                           title="Delete section"
                         >
@@ -1822,10 +2339,12 @@ export default function TestCaseLabPage() {
                       </div>
                     </div>
                   </div>
-                )
+                );
               })}
               {!activeModule?.sections?.length && (
-                <div className="px-4 py-8 text-sm text-muted-foreground">No sections</div>
+                <div className="px-4 py-8 text-sm text-muted-foreground">
+                  No sections
+                </div>
               )}
             </div>
           </div>
@@ -1838,17 +2357,18 @@ export default function TestCaseLabPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => setStepSort((s) => (s === "asc" ? "desc" : "asc"))}
+                  onClick={() =>
+                    setStepSort((s) => (s === "asc" ? "desc" : "asc"))
+                  }
                 >
-                  {stepSort === "asc" ? (
+                  {stepSort === "asc" ?
                     <>
                       <ChevronUp className="size-4" /> Sort: Ascending
                     </>
-                  ) : (
-                    <>
+                  : <>
                       <ChevronDown className="size-4" /> Sort: Descending
                     </>
-                  )}
+                  }
                 </Button>
                 <Button size="sm" variant="outline" onClick={quickPassSection}>
                   Quick pass
@@ -1856,21 +2376,42 @@ export default function TestCaseLabPage() {
               </div>
             </div>
             {!activeSection && (
-              <div className="px-4 py-8 text-sm text-muted-foreground">Select a section to view steps</div>
+              <div className="px-4 py-8 text-sm text-muted-foreground">
+                Select a section to view steps
+              </div>
             )}
             {activeSection && (
               <div className="flex flex-col gap-3 p-3 flex-1 overflow-y-auto">
                 {loadingRun && (
                   <div className="text-xs text-muted-foreground">Loading…</div>
                 )}
-                {(q ? sortedSteps(activeSection).filter((st) => st.title.toLowerCase().includes(q) || st.description.toLowerCase().includes(q) || st.expectedResults.toLowerCase().includes(q)) : sortedSteps(activeSection)).map((step, idx) => {
-                  const s = getStepStatus(sectionKey, step.id)
-                  const issue = getStepIssue(sectionKey, step.id)
-                  const issueCreatedAt = issue?.createdAt ? new Date(issue.createdAt).toLocaleString() : undefined
-                  const displayNum = stepSort === "asc" ? idx + 1 : activeSection.steps.length - idx
-                  const isEditing = editingStepId === step.id
+                {(q ?
+                  sortedSteps(activeSection).filter(
+                    (st) =>
+                      st.title.toLowerCase().includes(q) ||
+                      st.description.toLowerCase().includes(q) ||
+                      st.expectedResults.toLowerCase().includes(q),
+                  )
+                : sortedSteps(activeSection)
+                ).map((step, idx) => {
+                  const s = getStepStatus(sectionKey, step.id);
+                  const issue = getStepIssue(sectionKey, step.id);
+                  const issueCreatedAt =
+                    issue?.createdAt ?
+                      new Date(issue.createdAt).toLocaleString()
+                    : undefined;
+                  const issueProviderLabel =
+                    issue?.provider === "clickup" ? "ClickUp" : "Jira";
+                  const displayNum =
+                    stepSort === "asc" ?
+                      idx + 1
+                    : activeSection.steps.length - idx;
+                  const isEditing = editingStepId === step.id;
                   return (
-                    <div key={step.id} className="group relative rounded-md border p-4">
+                    <div
+                      key={step.id}
+                      className="group relative rounded-md border p-4"
+                    >
                       {/* Status badge in top-right corner */}
                       <div className="absolute top-2 right-2 pointer-events-none">
                         {statusBadge(s)}
@@ -1878,22 +2419,25 @@ export default function TestCaseLabPage() {
 
                       <div className="mb-2 flex items-center justify-between gap-3 pr-12">
                         <div className="font-medium">
-                          {isEditing ? (
+                          {isEditing ?
                             <input
                               value={editTitle}
                               onChange={(e) => setEditTitle(e.target.value)}
                               className="w-full rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                               placeholder="Step title"
                             />
-                          ) : (
-                            <>{displayNum}. {step.title}</>
-                          )}
+                          : <>
+                              {displayNum}. {step.title}
+                            </>
+                          }
                         </div>
                       </div>
                       <div className="mb-3 text-sm">
-                        <div className="text-xs font-medium text-muted-foreground">Description</div>
+                        <div className="text-xs font-medium text-muted-foreground">
+                          Description
+                        </div>
                         <div className="mt-1 text-muted-foreground">
-                          {isEditing ? (
+                          {isEditing ?
                             <textarea
                               value={editDesc}
                               onChange={(e) => setEditDesc(e.target.value)}
@@ -1901,42 +2445,59 @@ export default function TestCaseLabPage() {
                               className="w-full rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                               placeholder="Step description"
                             />
-                          ) : (
-                            <div onDoubleClick={() => startEdit(step)} className="cursor-text">
+                          : <div
+                              onDoubleClick={() => startEdit(step)}
+                              className="cursor-text"
+                            >
                               {step.description}
                             </div>
-                          )}
+                          }
                         </div>
-                        <div className="mt-3 text-xs font-medium text-muted-foreground">Expected results</div>
+                        <div className="mt-3 text-xs font-medium text-muted-foreground">
+                          Expected results
+                        </div>
                         <div className="mt-1 text-muted-foreground">
-                          {isEditing ? (
+                          {isEditing ?
                             <textarea
                               value={editExpectedResults}
-                              onChange={(e) => setEditExpectedResults(e.target.value)}
+                              onChange={(e) =>
+                                setEditExpectedResults(e.target.value)
+                              }
                               rows={3}
                               className="w-full rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                               placeholder="Expected results"
                             />
-                          ) : (
-                            <div onDoubleClick={() => startEdit(step)} className="cursor-text min-h-[1.25rem]">
-                              {step.expectedResults ? (
+                          : <div
+                              onDoubleClick={() => startEdit(step)}
+                              className="cursor-text min-h-[1.25rem]"
+                            >
+                              {step.expectedResults ?
                                 step.expectedResults
-                              ) : (
-                                <span className="text-muted-foreground/60 italic">No expected results</span>
-                              )}
+                              : <span className="text-muted-foreground/60 italic">
+                                  No expected results
+                                </span>
+                              }
                             </div>
-                          )}
+                          }
                         </div>
                       </div>
                       {isEditing && (
                         <div className="mb-3 flex items-center gap-2">
-                          <Button size="sm" onClick={saveEdit}>Save</Button>
-                          <Button size="sm" variant="outline" onClick={() => setDiscardOpen(true)}>Discard</Button>
+                          <Button size="sm" onClick={saveEdit}>
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setDiscardOpen(true)}
+                          >
+                            Discard
+                          </Button>
                         </div>
                       )}
                       {s === "blocked" && (
                         <div className="mb-3">
-                          {editingCommentStepId === step.id ? (
+                          {editingCommentStepId === step.id ?
                             <textarea
                               value={commentDraft}
                               onChange={(e) => setCommentDraft(e.target.value)}
@@ -1946,28 +2507,36 @@ export default function TestCaseLabPage() {
                               rows={3}
                               autoFocus
                             />
-                          ) : (
-                            <div
+                          : <div
                               onDoubleClick={() => startEditComment(step.id)}
                               className="cursor-text whitespace-pre-wrap"
                             >
                               {getStepComment(sectionKey, step.id) || (
-                                <span className="text-muted-foreground italic">Double‑click to add a comment…</span>
+                                <span className="text-muted-foreground italic">
+                                  Double‑click to add a comment…
+                                </span>
                               )}
                             </div>
-                          )}
+                          }
                         </div>
                       )}
                       {(s === "failed" || issue) && (
                         <div className="mt-3 flex flex-col gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                          {issue ? (
+                          {issue ?
                             <div className="flex flex-wrap items-center gap-2 text-sm">
-                              <span className="font-medium text-destructive">Jira issue:</span>
-                              <Button variant="link" size="sm" className="px-0" asChild>
+                              <span className="font-medium text-destructive">
+                                {issueProviderLabel} task:
+                              </span>
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="px-0"
+                                asChild
+                              >
                                 <Link
-                                  href={issue.url ?? '#'}
-                                  target={issue.url ? '_blank' : undefined}
-                                  rel={issue.url ? 'noreferrer' : undefined}
+                                  href={issue.url ?? "#"}
+                                  target={issue.url ? "_blank" : undefined}
+                                  rel={issue.url ? "noreferrer" : undefined}
                                   className="flex items-center gap-1"
                                 >
                                   {issue.key}
@@ -1975,58 +2544,62 @@ export default function TestCaseLabPage() {
                                 </Link>
                               </Button>
                               {issueCreatedAt && (
-                                <span className="text-xs text-muted-foreground">Created {issueCreatedAt}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  Created {issueCreatedAt}
+                                </span>
                               )}
                             </div>
-                          ) : jiraEnabled ? (
+                          : integrationEnabled ?
                             <div className="flex flex-wrap items-center gap-3">
-                              <div className="text-sm text-muted-foreground">Escalate this failure to Jira.</div>
+                              <div className="text-sm text-muted-foreground">
+                                Escalate this failure to{" "}
+                                {integrationProviderLabel}.
+                              </div>
                               <Button
                                 size="sm"
                                 variant="secondary"
-                                onClick={() => createJiraTask(step)}
+                                onClick={() => createExternalTask(step)}
                                 disabled={creatingIssueFor === step.id}
                               >
-                                {creatingIssueFor === step.id ? (
+                                {creatingIssueFor === step.id ?
                                   <>
                                     <Loader2 className="size-4 animate-spin" />
-                                    Creating issue…
+                                    Creating task…
                                   </>
-                                ) : (
-                                  'Create Jira task'
-                                )}
+                                : `Create ${integrationProviderLabel} task`}
                               </Button>
                             </div>
-                          ) : (
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          : <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                               <div className="text-sm font-medium text-destructive">
-                                Jira is disabled - enable now
+                                Issue integration is disabled
                               </div>
-                              {canManageOrganization ? (
+                              {canManageOrganization ?
                                 <Button
                                   size="sm"
                                   variant="secondary"
-                                  onClick={() => openJiraDialog({ forceEnable: true })}
-                                  disabled={jiraConfigLoading || jiraSaving}
+                                  onClick={() => openIntegrationsDialog()}
+                                  disabled={
+                                    integrationsLoading || integrationsSaving
+                                  }
                                 >
-                                  {jiraConfigLoading || jiraSaving ? (
+                                  {integrationsLoading || integrationsSaving ?
                                     <>
                                       <Loader2 className="size-4 animate-spin" />
                                       Please wait…
                                     </>
-                                  ) : (
-                                    'Enable now'
-                                  )}
+                                  : "Configure"}
                                 </Button>
-                              ) : (
-                                <div className="text-xs text-muted-foreground">
-                                  Ask an administrator to enable Jira for this organization.
+                              : <div className="text-xs text-muted-foreground">
+                                  Ask an administrator to enable Jira or ClickUp
+                                  for this organization.
                                 </div>
-                              )}
+                              }
                             </div>
-                          )}
-                          {jiraErrors[step.id] && (
-                            <div className="text-xs text-destructive">{jiraErrors[step.id]}</div>
+                          }
+                          {integrationErrors[step.id] && (
+                            <div className="text-xs text-destructive">
+                              {integrationErrors[step.id]}
+                            </div>
                           )}
                         </div>
                       )}
@@ -2034,13 +2607,17 @@ export default function TestCaseLabPage() {
                         <div className="flex items-center gap-2">
                           <Button
                             variant={s === "failed" ? "destructive" : "outline"}
-                            onClick={() => setStepStatus(sectionKey, step.id, "failed")}
+                            onClick={() =>
+                              setStepStatus(sectionKey, step.id, "failed")
+                            }
                           >
                             Failed
                           </Button>
                           <Button
                             variant={s === "blocked" ? "secondary" : "outline"}
-                            onClick={() => setStepStatus(sectionKey, step.id, "blocked")}
+                            onClick={() =>
+                              setStepStatus(sectionKey, step.id, "blocked")
+                            }
                           >
                             Blocked
                           </Button>
@@ -2048,30 +2625,47 @@ export default function TestCaseLabPage() {
                             variant={s === "passed" ? "default" : "outline"}
                             onClick={() => {
                               if (activeSection && sectionKey) {
-                                const beforeAllPassed = activeSection.steps.every((st) => getStepStatus(sectionKey, st.id) === "passed")
-                                const afterAllPassed = activeSection.steps.every((st) =>
-                                  st.id === step.id ? true : getStepStatus(sectionKey, st.id) === "passed"
-                                )
+                                const beforeAllPassed =
+                                  activeSection.steps.every(
+                                    (st) =>
+                                      getStepStatus(sectionKey, st.id) ===
+                                      "passed",
+                                  );
+                                const afterAllPassed =
+                                  activeSection.steps.every((st) =>
+                                    st.id === step.id ?
+                                      true
+                                    : getStepStatus(sectionKey, st.id) ===
+                                      "passed",
+                                  );
                                 if (!beforeAllPassed && afterAllPassed) {
-                                  setSectionCompleteName(activeSection.name)
-                                  setSectionCompleteOpen(true)
+                                  setSectionCompleteName(activeSection.name);
+                                  setSectionCompleteOpen(true);
                                 }
                               }
-                              setStepStatus(sectionKey, step.id, "passed")
+                              setStepStatus(sectionKey, step.id, "passed");
                             }}
                           >
                             Passed
                           </Button>
                           <Button
                             variant={s === "untested" ? "outline" : "outline"}
-                            onClick={() => setStepStatus(sectionKey, step.id, "untested")}
+                            onClick={() =>
+                              setStepStatus(sectionKey, step.id, "untested")
+                            }
                           >
                             Reset
                           </Button>
                         </div>
                         <button
                           aria-label="Delete step"
-                          onClick={() => requestDelete({ type: 'step', id: step.id, name: step.title })}
+                          onClick={() =>
+                            requestDelete({
+                              type: "step",
+                              id: step.id,
+                              name: step.title,
+                            })
+                          }
                           className="inline-flex p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                           title="Delete step"
                         >
@@ -2079,124 +2673,232 @@ export default function TestCaseLabPage() {
                         </button>
                       </div>
                     </div>
-                  )
+                  );
                 })}
               </div>
             )}
+          </div>
         </div>
       </div>
-    </div>
-      {/* Jira configuration dialog */}
+      {/* Issue integration configuration dialog */}
       <AlertDialog
-        open={jiraDialogOpen}
+        open={integrationsDialogOpen}
         onOpenChange={(open) => {
-          if (!open) closeJiraDialog(jiraConfig)
+          if (!open) closeIntegrationsDialog(integrationsConfig);
         }}
       >
         <AlertDialogContent>
-          <AlertDialogTitle>Manage Jira integration</AlertDialogTitle>
+          <AlertDialogTitle>Manage issue integration</AlertDialogTitle>
           <AlertDialogDescription>
-            Connect this organization to your Jira site. These settings apply only to this workspace.
+            Choose where failed test steps should be escalated for this
+            workspace.
           </AlertDialogDescription>
           <div className="flex flex-col gap-3 py-2">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={jiraForm.enabled}
-                onChange={(e) => setJiraForm((prev) => ({ ...prev, enabled: e.target.checked }))}
-                className="size-4 rounded border border-input"
-              />
-              Enable Jira for this organization
-            </label>
-            <div className="grid gap-3 text-sm">
-              <label className="flex flex-col gap-1">
-                <span className="text-muted-foreground">Base URL</span>
-                <input
-                  value={jiraForm.baseUrl}
-                  onChange={(e) => setJiraForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
-                  placeholder="https://your-domain.atlassian.net"
-                  className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-muted-foreground">Email</span>
-                <input
-                  type="email"
-                  value={jiraForm.email}
-                  onChange={(e) => setJiraForm((prev) => ({ ...prev, email: e.target.value }))}
-                  placeholder="qa@company.com"
-                  className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                />
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  ["none", "No integration"],
+                  ["jira", "Jira"],
+                  ["clickup", "ClickUp"],
+                ] as Array<[IssueProvider, string]>
+              ).map(([provider, label]) => (
+                <button
+                  key={provider}
+                  type="button"
+                  onClick={() =>
+                    setIntegrationsForm((prev) => ({ ...prev, provider }))
+                  }
+                  className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                    integrationsForm.provider === provider ?
+                      "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {integrationsForm.provider === "jira" && (
+              <div className="grid gap-3 text-sm">
                 <label className="flex flex-col gap-1">
-                  <span className="text-muted-foreground">Project key</span>
+                  <span className="text-muted-foreground">Base URL</span>
                   <input
-                    value={jiraForm.projectKey}
-                    onChange={(e) => setJiraForm((prev) => ({ ...prev, projectKey: e.target.value }))}
-                    placeholder="QA"
+                    value={integrationsForm.jira.baseUrl}
+                    onChange={(e) =>
+                      setIntegrationsForm((prev) => ({
+                        ...prev,
+                        jira: { ...prev.jira, baseUrl: e.target.value },
+                      }))
+                    }
+                    placeholder="https://your-domain.atlassian.net"
                     className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                   />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-muted-foreground">Issue type</span>
+                  <span className="text-muted-foreground">Email</span>
                   <input
-                    value={jiraForm.issueType}
-                    onChange={(e) => setJiraForm((prev) => ({ ...prev, issueType: e.target.value }))}
-                    placeholder="Task"
+                    type="email"
+                    value={integrationsForm.jira.email}
+                    onChange={(e) =>
+                      setIntegrationsForm((prev) => ({
+                        ...prev,
+                        jira: { ...prev.jira, email: e.target.value },
+                      }))
+                    }
+                    placeholder="qa@company.com"
+                    className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                  />
+                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-muted-foreground">Project key</span>
+                    <input
+                      value={integrationsForm.jira.projectKey}
+                      onChange={(e) =>
+                        setIntegrationsForm((prev) => ({
+                          ...prev,
+                          jira: { ...prev.jira, projectKey: e.target.value },
+                        }))
+                      }
+                      placeholder="QA"
+                      className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-muted-foreground">Issue type</span>
+                    <input
+                      value={integrationsForm.jira.issueType}
+                      onChange={(e) =>
+                        setIntegrationsForm((prev) => ({
+                          ...prev,
+                          jira: { ...prev.jira, issueType: e.target.value },
+                        }))
+                      }
+                      placeholder="Task"
+                      className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                    />
+                  </label>
+                </div>
+                <label className="flex flex-col gap-1">
+                  <span className="text-muted-foreground">API token</span>
+                  <input
+                    type="password"
+                    value={integrationsForm.jira.apiToken}
+                    onChange={(e) =>
+                      setIntegrationsForm((prev) => ({
+                        ...prev,
+                        jira: { ...prev.jira, apiToken: e.target.value },
+                      }))
+                    }
+                    placeholder="Jira API token"
                     className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
                   />
                 </label>
               </div>
-              <label className="flex flex-col gap-1">
-                <span className="text-muted-foreground">API token</span>
-                <input
-                  type="password"
-                  value={jiraForm.apiToken}
-                  onChange={(e) => setJiraForm((prev) => ({ ...prev, apiToken: e.target.value }))}
-                  placeholder="Jira API token"
-                  className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-                />
-              </label>
-            </div>
-            {jiraConfig?.hasToken && (
+            )}
+
+            {integrationsForm.provider === "clickup" && (
+              <div className="grid gap-3 text-sm">
+                <label className="flex flex-col gap-1">
+                  <span className="text-muted-foreground">List ID</span>
+                  <input
+                    value={integrationsForm.clickup.listId}
+                    onChange={(e) =>
+                      setIntegrationsForm((prev) => ({
+                        ...prev,
+                        clickup: { ...prev.clickup, listId: e.target.value },
+                      }))
+                    }
+                    placeholder="901234567890"
+                    className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-muted-foreground">Status</span>
+                  <input
+                    value={integrationsForm.clickup.status}
+                    onChange={(e) =>
+                      setIntegrationsForm((prev) => ({
+                        ...prev,
+                        clickup: { ...prev.clickup, status: e.target.value },
+                      }))
+                    }
+                    placeholder="to do"
+                    className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-muted-foreground">API token</span>
+                  <input
+                    type="password"
+                    value={integrationsForm.clickup.apiToken}
+                    onChange={(e) =>
+                      setIntegrationsForm((prev) => ({
+                        ...prev,
+                        clickup: { ...prev.clickup, apiToken: e.target.value },
+                      }))
+                    }
+                    placeholder="pk_..."
+                    className="rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                  />
+                </label>
+              </div>
+            )}
+
+            {((integrationsForm.provider === "jira" &&
+              integrationsConfig?.jira.hasToken) ||
+              (integrationsForm.provider === "clickup" &&
+                integrationsConfig?.clickup.hasToken)) && (
               <div className="text-xs text-muted-foreground">
                 Leave the API token blank to keep the existing one on file.
               </div>
             )}
-            {jiraUpdatedAtLabel && (
+            {integrationUpdatedAtLabel && (
               <div className="text-xs text-muted-foreground">
-                Last updated {jiraUpdatedAtLabel}
+                Last updated {integrationUpdatedAtLabel}
               </div>
             )}
-            {jiraDialogError && (
-              <div className="text-xs text-destructive">{jiraDialogError}</div>
+            {integrationsDialogError && (
+              <div className="text-xs text-destructive">
+                {integrationsDialogError}
+              </div>
             )}
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => closeJiraDialog(jiraConfig)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSaveJiraConfig} disabled={jiraSaving}>
-              {jiraSaving ? (
+            <AlertDialogCancel
+              onClick={() => closeIntegrationsDialog(integrationsConfig)}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleSaveIntegrationsConfig}
+              disabled={integrationsSaving}
+            >
+              {integrationsSaving ?
                 <>
                   <Loader2 className="size-4 animate-spin" />
                   Saving…
                 </>
-              ) : (
-                'Save changes'
-              )}
+              : "Save changes"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
       {/* Section Completed Alert */}
-      <AlertDialog open={sectionCompleteOpen} onOpenChange={setSectionCompleteOpen}>
+      <AlertDialog
+        open={sectionCompleteOpen}
+        onOpenChange={setSectionCompleteOpen}
+      >
         <AlertDialogContent>
           <AlertDialogTitle>Section Completed</AlertDialogTitle>
           <AlertDialogDescription>
-            {`All test steps in "${sectionCompleteName ?? ''}" are passed. Great job!`}
+            {`All test steps in "${sectionCompleteName ?? ""}" are passed. Great job!`}
           </AlertDialogDescription>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setSectionCompleteOpen(false)}>OK</AlertDialogAction>
+            <AlertDialogAction onClick={() => setSectionCompleteOpen(false)}>
+              OK
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -2208,7 +2910,9 @@ export default function TestCaseLabPage() {
             You have unsaved changes to this step. Do you want to discard them?
           </AlertDialogDescription>
           <AlertDialogFooter>
-            <Button variant="outline" onClick={() => setDiscardOpen(false)}>Keep editing</Button>
+            <Button variant="outline" onClick={() => setDiscardOpen(false)}>
+              Keep editing
+            </Button>
             <AlertDialogAction onClick={discardEdit}>Discard</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2218,11 +2922,15 @@ export default function TestCaseLabPage() {
         <AlertDialogContent>
           <AlertDialogTitle>Delete {deleteTarget?.type}?</AlertDialogTitle>
           <AlertDialogDescription>
-            {`This action cannot be undone. It will permanently remove "${deleteTarget?.name ?? ''}".`}
+            {`This action cannot be undone. It will permanently remove "${deleteTarget?.name ?? ""}".`}
           </AlertDialogDescription>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeleteOpen(false)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={performDelete}>Delete</AlertDialogAction>
+            <AlertDialogCancel onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={performDelete}>
+              Delete
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -2232,21 +2940,38 @@ export default function TestCaseLabPage() {
         <AlertDialogContent>
           <AlertDialogTitle>Duplicate module</AlertDialogTitle>
           <div className="flex flex-col gap-2">
-            <label className="text-sm text-muted-foreground">New module name</label>
+            <label className="text-sm text-muted-foreground">
+              New module name
+            </label>
             <input
               value={dupName}
               onChange={(e) => setDupName(e.target.value)}
               className="w-full rounded-md border bg-transparent p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-              placeholder={`${dupBase?.name ?? ''} Copy`}
+              placeholder={`${dupBase?.name ?? ""} Copy`}
             />
-            <div className="text-xs text-muted-foreground">ID (slug): {dupName ? dupName.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').slice(0,64) : ''}</div>
+            <div className="text-xs text-muted-foreground">
+              ID (slug):{" "}
+              {dupName ?
+                dupName
+                  .toLowerCase()
+                  .trim()
+                  .replace(/[^a-z0-9\s-]/g, "")
+                  .replace(/\s+/g, "-")
+                  .replace(/-+/g, "-")
+                  .slice(0, 64)
+              : ""}
+            </div>
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDupOpen(false)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={duplicateModule}>Duplicate</AlertDialogAction>
+            <AlertDialogCancel onClick={() => setDupOpen(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={duplicateModule}>
+              Duplicate
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  )
+  );
 }

@@ -6,6 +6,7 @@ import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@cl
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { NotificationsBell } from "./notifications-bell";
+import { JoinTeamDialog } from "./join-team-dialog";
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -32,6 +33,7 @@ export function SiteHeader() {
         </SignedOut>
         <SignedIn>
           <div className="flex items-center gap-2">
+            {pathname === "/" && <JoinTeamDialog />}
             <NotificationsBell />
             <UserButton afterSignOutUrl="/" />
           </div>

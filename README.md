@@ -28,12 +28,7 @@ NEXT_PUBLIC_PUSHER_KEY=
 PUSHER_SECRET=
 NEXT_PUBLIC_PUSHER_CLUSTER=eu
 
-# Jira (wymagane, jesli chcesz tworzyc issue z poziomu kroku testowego)
-JIRA_BASE_URL=
-JIRA_EMAIL=
-JIRA_API_TOKEN=
-JIRA_PROJECT_KEY=
-JIRA_ISSUE_TYPE=Task
+# Integracje issue trackerow konfiguruje sie w UI per organizacja
 ```
 
 > Aplikacja korzysta z autoryzacji Clerk dla wszystkich tras (patrz `middleware.ts`). Brak poprawnej konfiguracji Clerk lub Pusher spowoduje brak dostepu do glownego UI lub wylaczenie funkcji czasu rzeczywistego.
@@ -97,12 +92,7 @@ NEXT_PUBLIC_PUSHER_KEY=
 PUSHER_SECRET=
 NEXT_PUBLIC_PUSHER_CLUSTER=
 
-# Jira (opcjonalnie, ale wymagane dla funkcji "Create Jira issue")
-JIRA_BASE_URL=
-JIRA_EMAIL=
-JIRA_API_TOKEN=
-JIRA_PROJECT_KEY=
-JIRA_ISSUE_TYPE=Task
+# Jira/ClickUp konfiguruje sie w `/tmt` w ustawieniach integracji organizacji
 ```
 
 ### 3) Uruchom aplikacje
@@ -166,21 +156,26 @@ W `/tmt` dla krokow testowych:
 - **Quick pass** - hurtowo oznacza cala sekcje jako `passed`,
 - **Reset** - przywraca `untested` w sekcji.
 
-### Integracja z Jira (konfiguracja i uzycie)
+### Integracje Jira / ClickUp (konfiguracja i uzycie)
 
-Aplikacja wspiera tworzenie zgłoszen Jira bezposrednio z kroku testowego (gdy krok jest `failed`/wymaga follow-up).
+Aplikacja wspiera tworzenie zadan w Jira albo ClickUp bezposrednio z kroku testowego (gdy krok jest `failed`/wymaga follow-up). Organizacja moze miec aktywna jedna opcje: brak integracji, Jira albo ClickUp.
 
-1. Uzupelnij klucze Jira w `.env.local`:
-   - `JIRA_BASE_URL` (np. `https://twoja-firma.atlassian.net`)
-   - `JIRA_EMAIL` (email konta technicznego/uzytkownika)
-   - `JIRA_API_TOKEN` (token API z Atlassian)
-   - `JIRA_PROJECT_KEY` (np. `QA`)
-   - `JIRA_ISSUE_TYPE` (np. `Task`, domyslnie `Task`)
-2. Uruchom aplikacje ponownie po zmianie env (`npm run dev`).
-3. W `/tmt` otworz krok testowy i uzyj akcji tworzenia issue Jira.
-4. Po poprawnym utworzeniu, numer i link issue zapisuja sie przy kroku (`jiraIssue`) i synchronizuja realtime.
+1. W `/tmt` kliknij badge integracji w prawym gornym rogu.
+2. Wybierz **No integration**, **Jira** albo **ClickUp**.
+3. Dla Jira uzupelnij:
+   - Base URL (np. `https://twoja-firma.atlassian.net`)
+   - Email
+   - Project key (np. `QA`)
+   - Issue type (np. `Task`)
+   - API token
+4. Dla ClickUp uzupelnij:
+   - List ID
+   - Status (opcjonalnie, np. `to do`)
+   - API token (`pk_...`)
+5. W `/tmt` otworz krok testowy ze statusem `failed` i uzyj akcji tworzenia zadania.
+6. Po poprawnym utworzeniu, numer i link zadania zapisuja sie przy kroku (`externalTask`) i synchronizuja realtime.
 
-Dodatkowo w UI jest okno **Manage Jira integration** (ustawienia per-organizacja). Do wlaczenia integracji wymagane sa: Base URL, email, project key oraz token API. Token jest wymagany przynajmniej przy pierwszej aktywacji.
+Istniejace rekordy Jira zapisane jako `jiraIssue` nadal sa odczytywane. Nowe eskalacje zapisuja neutralne pole `externalTask`; dla Jiry aplikacja dodatkowo wypelnia `jiraIssue` dla kompatybilnosci.
 
 ### Dodawanie test case'ow z Excela (`.xlsx` / `.csv`)
 
