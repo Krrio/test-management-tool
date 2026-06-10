@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { connectDB } from "@/lib/db";
 import { Project } from "@/models/Project";
-import { getPusher } from "@/lib/pusher-server";
+// Pusher realtime triggers are disabled for production build stability.
+// Uncomment this import and the trigger blocks below to restore structure updates.
+// import { getPusher } from "@/lib/pusher-server";
 import { ensureOrganizationAccess } from "@/lib/organizations";
 
 type UpdateStepPayload = {
@@ -61,10 +63,13 @@ export async function PATCH(req: NextRequest) {
   }
   await project.save();
 
+  /*
+  // Realtime structure update via Pusher. Disabled for production build stability.
   try {
     const pusher = getPusher();
     await pusher.trigger(`presence-tmt-${organizationId}`, "structure-updated", { projectId, organizationId });
   } catch {}
+  */
 
   return NextResponse.json({ ok: true });
 }
@@ -105,10 +110,13 @@ export async function DELETE(req: NextRequest) {
 
   await project.save();
 
+  /*
+  // Realtime structure update via Pusher. Disabled for production build stability.
   try {
     const pusher = getPusher();
     await pusher.trigger(`presence-tmt-${organizationId}`, "structure-updated", { projectId, organizationId });
   } catch {}
+  */
 
   return NextResponse.json({ ok: true });
 }

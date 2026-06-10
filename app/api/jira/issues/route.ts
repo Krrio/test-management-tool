@@ -5,7 +5,9 @@ import { connectDB } from "@/lib/db";
 import { Project, ProjectDocument } from "@/models/Project";
 import { Run } from "@/models/Run";
 import { buildDescriptionDoc, createJiraIssue, makeParagraph, JiraDocNode, JiraIssue } from "@/lib/jira";
-import { getPusher } from "@/lib/pusher-server";
+// Pusher realtime triggers are disabled for production build stability.
+// Uncomment this import and the trigger block below to restore realtime updates.
+// import { getPusher } from "@/lib/pusher-server";
 import { ensureOrganizationAccess, getOrganizationJiraConfig } from "@/lib/organizations";
 
 const heading = (text: string): JiraDocNode => ({
@@ -198,6 +200,8 @@ export async function POST(req: NextRequest) {
     updatedBy: stepRun.updatedBy ?? userId,
   };
 
+  /*
+  // Realtime Jira issue update via Pusher. Disabled for production build stability.
   try {
     const pusher = getPusher();
     const channel = `private-section-${organizationId}|${projectId}|${moduleId}|${sectionId}`;
@@ -210,6 +214,7 @@ export async function POST(req: NextRequest) {
       ...payload,
     });
   } catch {}
+  */
 
   return NextResponse.json({
     issue: normalizedIssue,

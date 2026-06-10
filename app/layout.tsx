@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
+// Theme switching is disabled for production build stability. Uncomment this import
+// and the ThemeProvider wrapper below to restore runtime theme changes.
+// import { ThemeProvider } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 import {
   ClerkProvider,
@@ -31,7 +33,7 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider>
-      <html lang="en" suppressHydrationWarning>
+      <html lang="en" className="dark" suppressHydrationWarning>
         <head />
         <body
           className={cn(
@@ -40,16 +42,20 @@ export default function RootLayout({
             geistMono.variable,
           )}
         >
+          {/*
           <ThemeProvider
             attribute="class"
             defaultTheme="dark"
             enableSystem={false}
             disableTransitionOnChange
           >
+          */}
             <SiteHeader />
             {children}
             <Toaster />
+          {/*
           </ThemeProvider>
+          */}
         </body>
       </html>
     </ClerkProvider>

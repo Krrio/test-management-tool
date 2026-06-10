@@ -1,6 +1,8 @@
 import { connectDB } from "./db";
 import { Notification, NotificationDocument, NotificationType } from "@/models/Notification";
-import { getPusher } from "./pusher-server";
+// Pusher realtime notifications are disabled for production build stability.
+// Uncomment this import and the trigger block below to restore realtime notifications.
+// import { getPusher } from "./pusher-server";
 
 type NotificationInput = {
   userId: string;
@@ -55,10 +57,13 @@ export async function createNotification(input: NotificationInput): Promise<Noti
     metadata: input.metadata ?? {},
   });
   const plain = serializeNotification(doc.toObject() as StoredNotification);
+  /*
+  // Realtime notification trigger via Pusher. Disabled for production build stability.
   try {
     const pusher = getPusher();
     await pusher.trigger(`private-notifications-${input.userId}`, "notification-created", plain);
   } catch {}
+  */
   return plain;
 }
 

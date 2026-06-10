@@ -3,7 +3,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { connectDB } from "@/lib/db";
 import { Run } from "@/models/Run";
-import { getPusher } from "@/lib/pusher-server";
+// Pusher realtime triggers are disabled for production build stability.
+// Uncomment this import and the trigger block below to restore realtime updates.
+// import { getPusher } from "@/lib/pusher-server";
 import { ensureOrganizationAccess } from "@/lib/organizations";
 
 type UpdateStepArgs = {
@@ -16,36 +18,36 @@ type UpdateStepArgs = {
   organizationId: string;
 };
 
-type StoredStepRun = {
-  comment?: string;
-  externalTask?: {
-    provider?: "jira" | "clickup";
-    key?: string;
-    id?: string;
-    url?: string;
-    createdAt?: string | Date;
-    createdBy?: string;
-  };
-  jiraIssue?: {
-    key?: string;
-    id?: string;
-    url?: string;
-    createdAt?: string | Date;
-    createdBy?: string;
-  };
-};
+// type StoredStepRun = {
+//   comment?: string;
+//   externalTask?: {
+//     provider?: "jira" | "clickup";
+//     key?: string;
+//     id?: string;
+//     url?: string;
+//     createdAt?: string | Date;
+//     createdBy?: string;
+//   };
+//   jiraIssue?: {
+//     key?: string;
+//     id?: string;
+//     url?: string;
+//     createdAt?: string | Date;
+//     createdBy?: string;
+//   };
+// };
 
-const normalizeTask = (
-  value: StoredStepRun["externalTask"] | StoredStepRun["jiraIssue"] | undefined,
-  fallbackProvider?: "jira" | "clickup",
-) => {
-  if (!value?.key) return undefined;
-  return {
-    ...value,
-    provider: "provider" in value ? value.provider ?? fallbackProvider : fallbackProvider,
-    createdAt: value.createdAt ? new Date(value.createdAt).toISOString() : undefined,
-  };
-};
+// const normalizeTask = (
+//   value: StoredStepRun["externalTask"] | StoredStepRun["jiraIssue"] | undefined,
+//   fallbackProvider?: "jira" | "clickup",
+// ) => {
+//   if (!value?.key) return undefined;
+//   return {
+//     ...value,
+//     provider: "provider" in value ? value.provider ?? fallbackProvider : fallbackProvider,
+//     createdAt: value.createdAt ? new Date(value.createdAt).toISOString() : undefined,
+//   };
+// };
 
 export async function updateStepStatus(args: UpdateStepArgs) {
   const { userId } = await auth();
@@ -71,13 +73,14 @@ export async function updateStepStatus(args: UpdateStepArgs) {
     { organizationId, projectId, moduleId, sectionId },
     { $set: set },
     { upsert: true, new: true, setDefaultsOnInsert: true }
-  ).lean<{ steps?: Record<string, StoredStepRun> } | null>();
+  ).lean();
 
+  /*
+  // Realtime section update via Pusher. Disabled for production build stability.
   const steps = (run?.steps as Record<string, StoredStepRun>) ?? {};
   const stepState = steps[stepId] ?? {};
   const externalTask = normalizeTask(stepState.externalTask);
   const jiraIssue = normalizeTask(stepState.jiraIssue, "jira");
-
   try {
     const pusher = getPusher();
     const channel = `private-section-${organizationId}|${projectId}|${moduleId}|${sectionId}`;
@@ -91,6 +94,7 @@ export async function updateStepStatus(args: UpdateStepArgs) {
       updatedAt: now.toISOString(),
     });
   } catch {}
+  */
 
   return run;
 }

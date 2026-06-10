@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 
 const PRICE_LOOKUP: Record<string, Record<string, string | undefined>> = {
   monthly: {
@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
   try {
+    const stripe = getStripe();
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       payment_method_types: ["card"],

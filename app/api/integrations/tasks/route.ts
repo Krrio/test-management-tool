@@ -9,7 +9,9 @@ import {
   getOrganizationClickUpConfig,
   getOrganizationJiraConfig,
 } from "@/lib/organizations";
-import { getPusher } from "@/lib/pusher-server";
+// Pusher realtime triggers are disabled for production build stability.
+// Uncomment this import and the trigger block below to restore realtime updates.
+// import { getPusher } from "@/lib/pusher-server";
 import { Project, ProjectDocument } from "@/models/Project";
 import { Run } from "@/models/Run";
 
@@ -354,6 +356,8 @@ export async function POST(req: NextRequest) {
     updatedBy: stepRun.updatedBy ?? userId,
   };
 
+  /*
+  // Realtime task update via Pusher. Disabled for production build stability.
   try {
     const pusher = getPusher();
     const channel = `private-section-${organizationId}|${projectId}|${moduleId}|${sectionId}`;
@@ -366,6 +370,7 @@ export async function POST(req: NextRequest) {
       ...payload,
     });
   } catch {}
+  */
 
   return NextResponse.json({
     task: normalizedExternalTask,

@@ -2,7 +2,9 @@
 
 import { useRef, type CSSProperties, type MouseEvent } from "react";
 import Image from "next/image";
-import LaserFlow from "../LaserFlow";
+// LaserFlow component is not present in the repo. Uncomment after adding
+// components/LaserFlow.tsx or adjusting this import.
+// import LaserFlow from "../LaserFlow";
 
 type RevealImageStyle = CSSProperties & {
   "--mx": string;
@@ -82,7 +84,9 @@ function HowTo() {
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
+      {/*
       <LaserFlow horizontalBeamOffset={0.1} verticalBeamOffset={0} color="#FF79C6" />
+      */}
 
       <div style={overlayStyle}>{/* Your content here */}</div>
 

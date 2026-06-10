@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useTheme } from "next-themes";
+// Theme switching is disabled for production build stability. Uncomment this import
+// and the related state/UI block below to restore runtime theme changes.
+// import { useTheme } from "next-themes";
 import {
   Select,
   SelectContent,
@@ -35,8 +37,8 @@ import {
   Trash,
   ExternalLink,
   Loader2,
-  Moon,
-  Sun,
+  // Moon,
+  // Sun,
 } from "lucide-react";
 import Link from "next/link";
 import { SignedIn, UserButton } from "@clerk/nextjs";
@@ -155,11 +157,13 @@ type ApiProject = {
   }>;
 };
 
-type PusherChannel = {
-  bind: (event: string, callback: (...args: unknown[]) => void) => void;
-  unsubscribe: () => void;
-  members?: { count?: number };
-};
+// Pusher realtime is disabled for production build stability. Uncomment this type
+// together with the Pusher effects below to restore realtime updates.
+// type PusherChannel = {
+//   bind: (event: string, callback: (...args: unknown[]) => void) => void;
+//   unsubscribe: () => void;
+//   members?: { count?: number };
+// };
 
 const mapApiProjects = (items: ApiProject[]): Project[] =>
   items.map((p) => ({
@@ -252,11 +256,11 @@ const normalizeIntegrationsConfig = (
   };
 };
 
-const isStepStatus = (value: unknown): value is StepStatus =>
-  value === "untested" ||
-  value === "passed" ||
-  value === "failed" ||
-  value === "blocked";
+// const isStepStatus = (value: unknown): value is StepStatus =>
+//   value === "untested" ||
+//   value === "passed" ||
+//   value === "failed" ||
+//   value === "blocked";
 
 const normalizeStepIssue = (
   value: unknown,
@@ -293,71 +297,71 @@ const normalizeStepIssue = (
   return issue;
 };
 
-type StepUpdatedPayload = {
-  stepId: string;
-  status: StepStatus;
-  comment?: string;
-  externalTask?: StepIssue;
-  jiraIssue?: StepIssue;
-};
+// type StepUpdatedPayload = {
+//   stepId: string;
+//   status: StepStatus;
+//   comment?: string;
+//   externalTask?: StepIssue;
+//   jiraIssue?: StepIssue;
+// };
 
-type StepBroadcastPayload = StepUpdatedPayload & {
-  organizationId: string;
-  projectId: string;
-  moduleId: string;
-  sectionId: string;
-};
+// type StepBroadcastPayload = StepUpdatedPayload & {
+//   organizationId: string;
+//   projectId: string;
+//   moduleId: string;
+//   sectionId: string;
+// };
 
-type StructureUpdatedPayload = {
-  organizationId: string;
-  projectId: string;
-};
+// type StructureUpdatedPayload = {
+//   organizationId: string;
+//   projectId: string;
+// };
 
-const parseStepUpdatedPayload = (input: unknown): StepUpdatedPayload | null => {
-  if (!input || typeof input !== "object") return null;
-  const raw = input as Record<string, unknown>;
-  const stepId = typeof raw.stepId === "string" ? raw.stepId : "";
-  const status = isStepStatus(raw.status) ? raw.status : undefined;
-  if (!stepId || !status) return null;
+// const parseStepUpdatedPayload = (input: unknown): StepUpdatedPayload | null => {
+//   if (!input || typeof input !== "object") return null;
+//   const raw = input as Record<string, unknown>;
+//   const stepId = typeof raw.stepId === "string" ? raw.stepId : "";
+//   const status = isStepStatus(raw.status) ? raw.status : undefined;
+//   if (!stepId || !status) return null;
 
-  const payload: StepUpdatedPayload = {
-    stepId,
-    status,
-    comment: typeof raw.comment === "string" ? raw.comment : undefined,
-    externalTask: normalizeStepIssue(raw.externalTask),
-    jiraIssue: normalizeStepIssue(raw.jiraIssue, "jira"),
-  };
+//   const payload: StepUpdatedPayload = {
+//     stepId,
+//     status,
+//     comment: typeof raw.comment === "string" ? raw.comment : undefined,
+//     externalTask: normalizeStepIssue(raw.externalTask),
+//     jiraIssue: normalizeStepIssue(raw.jiraIssue, "jira"),
+//   };
 
-  return payload;
-};
+//   return payload;
+// };
 
-const parseStepBroadcastPayload = (
-  input: unknown,
-): StepBroadcastPayload | null => {
-  if (!input || typeof input !== "object") return null;
-  const base = parseStepUpdatedPayload(input);
-  if (!base) return null;
-  const raw = input as Record<string, unknown>;
-  const organizationId =
-    typeof raw.organizationId === "string" ? raw.organizationId : "";
-  const projectId = typeof raw.projectId === "string" ? raw.projectId : "";
-  const moduleId = typeof raw.moduleId === "string" ? raw.moduleId : "";
-  const sectionId = typeof raw.sectionId === "string" ? raw.sectionId : "";
-  if (!organizationId || !projectId || !moduleId || !sectionId) return null;
-  return { ...base, organizationId, projectId, moduleId, sectionId };
-};
+// const parseStepBroadcastPayload = (
+//   input: unknown,
+// ): StepBroadcastPayload | null => {
+//   if (!input || typeof input !== "object") return null;
+//   const base = parseStepUpdatedPayload(input);
+//   if (!base) return null;
+//   const raw = input as Record<string, unknown>;
+//   const organizationId =
+//     typeof raw.organizationId === "string" ? raw.organizationId : "";
+//   const projectId = typeof raw.projectId === "string" ? raw.projectId : "";
+//   const moduleId = typeof raw.moduleId === "string" ? raw.moduleId : "";
+//   const sectionId = typeof raw.sectionId === "string" ? raw.sectionId : "";
+//   if (!organizationId || !projectId || !moduleId || !sectionId) return null;
+//   return { ...base, organizationId, projectId, moduleId, sectionId };
+// };
 
-const parseStructureUpdatedPayload = (
-  input: unknown,
-): StructureUpdatedPayload | null => {
-  if (!input || typeof input !== "object") return null;
-  const raw = input as Record<string, unknown>;
-  const organizationId =
-    typeof raw.organizationId === "string" ? raw.organizationId : "";
-  const projectId = typeof raw.projectId === "string" ? raw.projectId : "";
-  if (!organizationId || !projectId) return null;
-  return { organizationId, projectId };
-};
+// const parseStructureUpdatedPayload = (
+//   input: unknown,
+// ): StructureUpdatedPayload | null => {
+//   if (!input || typeof input !== "object") return null;
+//   const raw = input as Record<string, unknown>;
+//   const organizationId =
+//     typeof raw.organizationId === "string" ? raw.organizationId : "";
+//   const projectId = typeof raw.projectId === "string" ? raw.projectId : "";
+//   if (!organizationId || !projectId) return null;
+//   return { organizationId, projectId };
+// };
 
 // Data now fetched from API
 
@@ -391,8 +395,10 @@ export default function TestCaseLabPage() {
   const [sectionId, setSectionId] = useState<string>("");
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingRun, setLoadingRun] = useState(false);
-  const { theme, setTheme } = useTheme();
-  const [themeMounted, setThemeMounted] = useState(false);
+  // Theme switching is disabled for production build stability. Uncomment with
+  // the useTheme import and topbar UI block to restore runtime theme changes.
+  // const { theme, setTheme } = useTheme();
+  // const [themeMounted, setThemeMounted] = useState(false);
 
   // runs: map from sectionKey -> map of stepId -> { status, comment? }
   const [runs, setRuns] = useState<
@@ -403,7 +409,9 @@ export default function TestCaseLabPage() {
     string | undefined
   >(undefined);
   const [stepSort, setStepSort] = useState<"asc" | "desc">("asc");
-  const [viewerCount, setViewerCount] = useState<number>(0);
+  // Pusher presence is disabled for production build stability. Uncomment with
+  // the Pusher effects below to restore active viewer counts.
+  // const [viewerCount, setViewerCount] = useState<number>(0);
   const [editingStepId, setEditingStepId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState<string>("");
   const [editDesc, setEditDesc] = useState<string>("");
@@ -466,11 +474,11 @@ export default function TestCaseLabPage() {
       apiToken: "",
     },
   });
-  const isDarkMode = theme === "dark";
+  // const isDarkMode = theme === "dark";
 
-  useEffect(() => {
-    setThemeMounted(true);
-  }, []);
+  // useEffect(() => {
+  //   setThemeMounted(true);
+  // }, []);
 
   const loadOrganizations = useCallback(async () => {
     setLoadingOrganizations(true);
@@ -1716,7 +1724,10 @@ export default function TestCaseLabPage() {
     activeSection,
   ]);
 
-  // Realtime updates via Pusher
+  /*
+  // Realtime updates via Pusher. Disabled for production build stability.
+  // Uncomment together with Pusher imports/types above and server-side triggers
+  // to restore live section updates and active viewer counts.
   useEffect(() => {
     let channel: PusherChannel | null = null;
     let presence: PusherChannel | null = null;
@@ -1795,7 +1806,7 @@ export default function TestCaseLabPage() {
     activeSection,
   ]);
 
-  // Listen for structure updates and step changes globally; refresh/merge so UI updates live and efficent
+  // Listen for structure updates and step changes globally; refresh/merge so UI updates live and efficent.
   useEffect(() => {
     let chan: PusherChannel | null = null;
     const run = async () => {
@@ -1848,6 +1859,7 @@ export default function TestCaseLabPage() {
       } catch {}
     };
   }, [organizationId, projectId, project, refreshProjectsPreserve]);
+  */
 
   if (loadingOrganizations) {
     return (
@@ -2011,6 +2023,9 @@ export default function TestCaseLabPage() {
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-3">
+            {/*
+            Theme switcher is disabled for production build stability. Uncomment
+            together with useTheme state above and ThemeProvider in app/layout.tsx.
             {themeMounted && (
               <div className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-card/60 px-2 py-1 text-xs text-muted-foreground">
                 <Sun
@@ -2029,6 +2044,7 @@ export default function TestCaseLabPage() {
                 />
               </div>
             )}
+            */}
             {renderIntegrationsBadge()}
             {canManageOrganization && (
               <button
@@ -2054,13 +2070,17 @@ export default function TestCaseLabPage() {
                 }
               </button>
             )}
-            {/* <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
+            {/*
+            Pusher presence viewer badge disabled for production build stability.
+            Uncomment with viewerCount state and Pusher presence effect above.
+            <div className="text-xs text-muted-foreground inline-flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
               <span>{viewerCount || 0} viewing</span>
-            </div> */}
+            </div>
+            */}
             <Link
               href="/"
               aria-label="Back to home"

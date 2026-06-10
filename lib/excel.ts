@@ -273,7 +273,7 @@ export function parseExcel(buffer: Buffer): ExcelRow[] {
   const headers = rows[0];
   const keys = headers.map((header, index) => {
     const normalised = normaliseHeaderKey(header);
-    return headerMap[normalised] ?? header.trim() || `column${index + 1}`;
+    return headerMap[normalised] ?? (header.trim() || `column${index + 1}`);
   });
   const dataRows = rows.slice(1);
   return dataRows

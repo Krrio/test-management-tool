@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, ArrowRight, ArrowDown } from "lucide-react";
+import { ArrowRight, ArrowDown } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import "@/app/home.css";
@@ -32,7 +32,7 @@ const Hero = () => {
       const offset = 160;
       const wiggleAmplitude = 12;
       let enterTimeline: gsap.core.Timeline | null = null;
-      let wiggleTweens: gsap.core.Tween[] = [];
+      let wiggleTweens: gsap.core.Animation[] = [];
 
       const stopWiggles = () => {
         wiggleTweens.forEach((tween) => tween.kill());
@@ -42,7 +42,11 @@ const Hero = () => {
       const startWiggles = () => {
         stopWiggles();
 
-        const createWiggle = (element: HTMLElement, direction: 1 | -1, index: number) => {
+        const createWiggle = (
+          element: HTMLElement,
+          direction: 1 | -1,
+          index: number,
+        ) => {
           const tween = gsap
             .timeline({
               delay: index * 0.12,
@@ -61,7 +65,9 @@ const Hero = () => {
         };
 
         leftItems.forEach((element, index) => createWiggle(element, 1, index));
-        rightItems.forEach((element, index) => createWiggle(element, -1, index));
+        rightItems.forEach((element, index) =>
+          createWiggle(element, -1, index),
+        );
       };
 
       const animateIn = () => {
@@ -82,7 +88,7 @@ const Hero = () => {
             stagger: 0.12,
             overwrite: "auto",
           },
-          0
+          0,
         );
 
         enterTimeline.to(
@@ -95,7 +101,7 @@ const Hero = () => {
             stagger: 0.12,
             overwrite: "auto",
           },
-          0.1
+          0.1,
         );
       };
 
@@ -149,7 +155,10 @@ const Hero = () => {
   }, []);
 
   return (
-    <main ref={heroRef} className="relative h-[calc(100vh-4rem)] w-full overflow-hidden">
+    <main
+      ref={heroRef}
+      className="relative h-[calc(100vh-4rem)] w-full overflow-hidden"
+    >
       {/* Ambient background */}
       <div className="absolute inset-0 bg-[radial-gradient(1200px_500px_at_60%_20%,rgba(180,200,210,0.2),transparent),radial-gradient(700px_400px_at_20%_80%,rgba(160,200,255,0.12),transparent)]"></div>
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:24px_24px] opacity-10"></div>
@@ -236,20 +245,27 @@ const Hero = () => {
               </div>
             </Link> */}
 
-
             <h1 className="text-4xl sm:text-6xl md:text-7xl tracking-tight leading-[1.08] font-devis">
-              <span className="text-white">Streamline Your</span><br />
-              <span className="ml-2 bg-clip-text text-transparent animate-gradient-text">Testing.</span>
+              <span className="text-white">Streamline Your</span>
+              <br />
+              <span className="ml-2 bg-clip-text text-transparent animate-gradient-text">
+                Testing.
+              </span>
             </h1>
             <p className="mt-4 max-w-2xl text-sm sm:text-base text-white/70 font-devis">
-              Centralize every test case, plan, and result. Ship with confidence, faster.
+              Centralize every test case, plan, and result. Ship with
+              confidence, faster.
             </p>
 
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
               <SignedIn>
                 <Link href="/tmt">
-                  <Button className="rounded-full px-6 cursor-pointer group font-devis" size="lg">
-                    Open App<ArrowRight className="mr-2 size-4 rotate-315 group-hover:translate-x-2 transition-all ease-in-out" />
+                  <Button
+                    className="rounded-full px-6 cursor-pointer group font-devis"
+                    size="lg"
+                  >
+                    Open App
+                    <ArrowRight className="mr-2 size-4 rotate-315 group-hover:translate-x-2 transition-all ease-in-out" />
                   </Button>
                 </Link>
               </SignedIn>
@@ -270,18 +286,25 @@ const Hero = () => {
 
           {/* Vertical light lines (animated flow) */}
           <div className="pointer-events-none absolute left-1/2 top-[85%] -translate-x-1/2 h-[22%] w-px">
-            <span className="block w-px h-[180%] bg-gradient-to-b from-transparent via-white/60 to-transparent line-flow" style={{ animationDelay: "0s" }} />
+            <span
+              className="block w-px h-[180%] bg-gradient-to-b from-transparent via-white/60 to-transparent line-flow"
+              style={{ animationDelay: "0s" }}
+            />
           </div>
           <div className="pointer-events-none absolute left-[calc(50%+24px)] top-[68%] h-[34%] w-px overflow-hidden">
-            <span className="block w-px h-[180%] bg-gradient-to-b from-transparent via-white/40 to-transparent line-flow" style={{ animationDelay: "0.6s" }} />
+            <span
+              className="block w-px h-[180%] bg-gradient-to-b from-transparent via-white/40 to-transparent line-flow"
+              style={{ animationDelay: "0.6s" }}
+            />
           </div>
           <div className="pointer-events-none absolute left-[calc(50%-24px)] top-[68%] h-[30%] w-px overflow-hidden">
-            <span className="block w-px h-[180%] bg-gradient-to-b from-transparent via-white/30 to-transparent line-flow" style={{ animationDelay: "1.2s" }} />
+            <span
+              className="block w-px h-[180%] bg-gradient-to-b from-transparent via-white/30 to-transparent line-flow"
+              style={{ animationDelay: "1.2s" }}
+            />
           </div>
           {/* Data markers anchored to each line */}
-          <div
-            className="pointer-events-none absolute left-[226px] top-[210px] 2xl:top-[420px] hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-left"
-          >
+          <div className="pointer-events-none absolute left-[226px] top-[210px] 2xl:top-[420px] hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-left">
             <div className="rounded-full border">
               <Image
                 src="/shape-1.png"
@@ -294,14 +317,15 @@ const Hero = () => {
             </div>
             <div className="flex flex-col text-left leading-tight">
               <div className="flex items-center gap-2 text-xs sm:text-sm font-medium font-devis">
-                <span className="inline-block size-1.5 rounded-full bg-white" /> Test Steps
+                <span className="inline-block size-1.5 rounded-full bg-white" />{" "}
+                Test Steps
               </div>
-              <span className="pl-4 text-[10px] sm:text-xs text-white/60">20.945</span>
+              <span className="pl-4 text-[10px] sm:text-xs text-white/60">
+                20.945
+              </span>
             </div>
           </div>
-          <div
-            className="pointer-events-none absolute left-[156px] top-[495px] 2xl:top-[835px]  hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-left"
-          >
+          <div className="pointer-events-none absolute left-[156px] top-[495px] 2xl:top-[835px]  hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-left">
             <div className="rounded-full border">
               <Image
                 src="/shape-2.png"
@@ -314,14 +338,15 @@ const Hero = () => {
             </div>
             <div className="flex flex-col text-left leading-tight">
               <div className="flex items-center gap-2 text-xs sm:text-sm font-medium font-devis">
-                <span className="inline-block size-1.5 rounded-full bg-white" /> Sections
+                <span className="inline-block size-1.5 rounded-full bg-white" />{" "}
+                Sections
               </div>
-              <span className="pl-4 text-[10px] sm:text-xs text-white/60">19.346</span>
+              <span className="pl-4 text-[10px] sm:text-xs text-white/60">
+                19.346
+              </span>
             </div>
           </div>
-          <div
-            className="pointer-events-none absolute right-[176px] top-[210px] 2xl:top-[420px] hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-right"
-          >
+          <div className="pointer-events-none absolute right-[176px] top-[210px] 2xl:top-[420px] hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-right">
             <div className="rounded-full border">
               <Image
                 src="/shape-3.png"
@@ -334,14 +359,15 @@ const Hero = () => {
             </div>
             <div className="flex flex-col text-right leading-tight">
               <div className="flex items-center justify-end gap-2 text-xs sm:text-sm font-medium font-devis">
-                Projects <span className="inline-block size-1.5 rounded-full bg-white" />
+                Projects{" "}
+                <span className="inline-block size-1.5 rounded-full bg-white" />
               </div>
-              <span className="pr-4 text-[10px] sm:text-xs text-white/60">2,077</span>
+              <span className="pr-4 text-[10px] sm:text-xs text-white/60">
+                2,077
+              </span>
             </div>
           </div>
-          <div
-            className="pointer-events-none absolute right-[86px] top-[495px] 2xl:top-[835px]  hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-right"
-          >
+          <div className="pointer-events-none absolute right-[86px] top-[495px] 2xl:top-[835px]  hidden md:flex items-center gap-4 text-white/80 hero-shape hero-shape-right">
             <div className="rounded-full border">
               <Image
                 src="/shape-4.png"
@@ -354,22 +380,27 @@ const Hero = () => {
             </div>
             <div className="flex flex-col text-right leading-tight">
               <div className="flex items-center justify-end gap-2 text-xs sm:text-sm font-medium font-devis">
-                Modules <span className="inline-block size-1.5 rounded-full bg-white" />
+                Modules{" "}
+                <span className="inline-block size-1.5 rounded-full bg-white" />
               </div>
-              <span className="pr-4 text-[10px] sm:text-xs text-white/60">440</span>
+              <span className="pr-4 text-[10px] sm:text-xs text-white/60">
+                440
+              </span>
             </div>
           </div>
           {/* Scroll hint bottom-left */}
           <div className="absolute left-4 bottom-4">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/5 px-3 py-1 text-xs text-white/80 backdrop-blur space-x-2">
               <span className="h-[16px]">v1.0</span>
-              <span className="h-[16px] flex flex-row items-center justify-center">Scroll down <ArrowDown className="scale-50"/></span>
+              <span className="h-[16px] flex flex-row items-center justify-center">
+                Scroll down <ArrowDown className="scale-50" />
+              </span>
             </div>
           </div>
         </div>
       </div>
     </main>
-  )
-}
+  );
+};
 
-export default Hero
+export default Hero;

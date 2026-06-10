@@ -1,3 +1,14 @@
+import { NextResponse } from "next/server";
+
+export async function POST() {
+  return NextResponse.json({ error: "Pusher disabled" }, { status: 503 });
+}
+
+/*
+Pusher auth route disabled for production build stability.
+Uncomment this block and remove the stub POST above to restore private/presence
+channel authorization.
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { getPusher } from "@/lib/pusher-server";
@@ -74,3 +85,4 @@ export async function POST(req: NextRequest) {
   const authResponse = pusher.authorizeChannel(socketId, channelName);
   return NextResponse.json(authResponse);
 }
+*/

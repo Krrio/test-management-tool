@@ -186,11 +186,12 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
         )
         if (!response.ok) throw new Error("Failed to load land data")
 
-        landFeatures = await response.json()
+        const loadedLandFeatures = (await response.json()) as LandFeatureCollection
+        landFeatures = loadedLandFeatures
 
         // Generate dots for all land features
         let totalDots = 0
-        landFeatures.features.forEach((feature) => {
+        loadedLandFeatures.features.forEach((feature) => {
           const dots = generateDotsInPolygon(feature, 16)
           dots.forEach(([lng, lat]) => {
             allDots.push({ lng, lat, visible: true })
@@ -198,7 +199,7 @@ export default function RotatingEarth({ width = 800, height = 600, className = "
           })
         })
 
-        console.log(`[v0] Total dots generated: ${totalDots} across ${landFeatures.features.length} land features`)
+        console.log(`[v0] Total dots generated: ${totalDots} across ${loadedLandFeatures.features.length} land features`)
 
         render()
       } catch (err) {

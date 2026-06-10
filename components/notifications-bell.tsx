@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, Loader2 } from "lucide-react";
-import type Pusher from "pusher-js";
-import type { Channel } from "pusher-js";
+// Pusher realtime notifications are disabled for production build stability.
+// Uncomment these imports and the subscription effect below to restore them.
+// import type Pusher from "pusher-js";
+// import type { Channel } from "pusher-js";
 import { useUser } from "@clerk/nextjs";
 
 import { cn } from "@/lib/utils";
@@ -163,6 +165,8 @@ export function NotificationsBell() {
     };
   }, [open, unreadCount, markingRead, user?.id]);
 
+  /*
+  // Realtime notification subscription via Pusher. Disabled for production build stability.
   useEffect(() => {
     if (!user?.id) return;
     let channel: Channel | null = null;
@@ -197,6 +201,7 @@ export function NotificationsBell() {
       }
     };
   }, [user?.id]);
+  */
 
   const toggle = () => {
     if (!isLoaded || !user?.id) return;
